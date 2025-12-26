@@ -44,12 +44,13 @@ export function ProductsGrid() {
     }
   }
 
-  const formatProductForCard = (product: Product) => ({
+  const formatProductForCard = (product: any) => ({
     id: product.id,
     name: product.name,
     price: product.price,
     originalPrice: product.original_price || null,
-    image: product.image_urls?.[0] || product.image_url || "/placeholder.svg",
+    // API returns 'image' as array for filter endpoint
+    image: Array.isArray(product.image) ? product.image[0] : (product.image_urls?.[0] || product.image_url || "/placeholder.svg"),
     rating: product.rating || 4.0,
   })
 
@@ -90,10 +91,10 @@ export function ProductsGrid() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="price-high">Price (High to Low)</SelectItem>
-              <SelectItem value="price-low">Price (Low to High)</SelectItem>
+              <SelectItem value="price_high_low">Price (High to Low)</SelectItem>
+              <SelectItem value="price_low_high">Price (Low to High)</SelectItem>
               <SelectItem value="newest">Newest</SelectItem>
-              <SelectItem value="popular">Most Popular</SelectItem>
+              <SelectItem value="rating_high_low">Most Popular</SelectItem>
             </SelectContent>
           </Select>
         </div>

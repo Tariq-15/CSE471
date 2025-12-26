@@ -13,6 +13,7 @@ import { SupplierDetail } from "./components/SupplierDetail";
 import { Analytics } from "./components/Analytics";
 import { StockManagement } from "./components/StockManagement";
 import { DiscountsManagement } from "./components/DiscountsManagement";
+import { SizeChartManagement } from "./components/SizeChartManagement";
 import { UserSettings } from "./components/UserSettings";
 
 export default function App() {
@@ -51,6 +52,8 @@ export default function App() {
         return <Analytics />;
       case "stock":
         return <StockManagement />;
+      case "sizecharts":
+        return <SizeChartManagement />;
       case "discounts":
         return <DiscountsManagement />;
       case "settings":

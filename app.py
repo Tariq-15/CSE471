@@ -1138,7 +1138,7 @@ def get_new_arrivals():
                 'id': product.get('id'),
                 'name': product.get('name', ''),
                 'rating': average_rating,
-                'image_urls': images,  # Array of max 2 images
+                'image': images,  # Array of max 2 images
                 'price': float(product.get('price', 0))
             })
         
@@ -1228,84 +1228,6 @@ def get_featured_products():
             "error": str(e)
         }), 500
 
-@app.route('/api/products/top-selling', methods=['GET'])
-def get_top_selling():
-    """
-    Get top selling products (based on orders or Best Seller tag)
-    Returns: Name, Rating (average), Image, Price
-    """
-    try:
-        import random
-        limit = request.args.get('limit', 4, type=int)
-        
-        # Get products with "Best Seller" tag
-        response = supabase.table('products').select('id, name, price, image_urls, image_url, tags').execute()
-        
-        # Filter products with "Best Seller" tag
-        best_seller_products = []
-        for product in response.data or []:
-            product_tags = product.get('tags', [])
-            if isinstance(product_tags, list):
-                if any('best seller' in str(t).lower() for t in product_tags):
-                    best_seller_products.append(product)
-            elif isinstance(product_tags, str) and 'best seller' in product_tags.lower():
-                best_seller_products.append(product)
-        
-        # If not enough best sellers, add random products
-        if len(best_seller_products) < limit:
-            remaining = limit - len(best_seller_products)
-            other_products = [p for p in (response.data or []) if p not in best_seller_products]
-            if other_products:
-                additional = random.sample(other_products, min(remaining, len(other_products)))
-                best_seller_products.extend(additional)
-        
-        # Randomly select products if more than limit
-        if len(best_seller_products) > limit:
-            selected_products = random.sample(best_seller_products, limit)
-        else:
-            selected_products = best_seller_products
-        
-        # Format products
-        products_list = []
-        for product in selected_products:
-            product_id = product['id']
-            
-            # Get average rating
-            reviews_response = supabase.table('reviews')\
-                .select('rating')\
-                .eq('product_id', product_id)\
-                .execute()
-            
-            ratings = [r['rating'] for r in (reviews_response.data or []) if r.get('rating')]
-            average_rating = round(sum(ratings) / len(ratings), 1) if ratings else 4.5
-            
-            # Get image
-            image_urls = product.get('image_urls', [])
-            if isinstance(image_urls, list) and image_urls:
-                image = image_urls[0]
-            else:
-                image = product.get('image_url', '/placeholder.svg')
-            
-            products_list.append({
-                'id': product.get('id'),
-                'name': product.get('name', ''),
-                'rating': average_rating,
-                'image_urls': [image] if image else [],
-                'price': float(product.get('price', 0))
-            })
-        
-        return jsonify({
-            "success": True,
-            "data": products_list,
-            "count": len(products_list)
-        }), 200
-            
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
-
 @app.route('/api/products', methods=['GET'])
 def get_all_products():
     """
@@ -1329,13 +1251,12 @@ def get_all_products():
         max_price = request.args.get('max_price', type=float)
         color = request.args.get('color')
         tag = request.args.get('tag')  # Filter by tag
-        sort = request.args.get('sort', 'newest')  # Sort parameter
         
         # Calculate offset
         offset = (page - 1) * limit
         
         # Build query
-        query = supabase.table('products').select('id, name, price, original_price, image_urls, category, color, tags', count='exact')
+        query = supabase.table('products').select('id, name, price, image_urls, category, color, tags', count='exact')
         
         # Apply filters (tag filter will be applied in Python)
         if category:
@@ -1360,20 +1281,9 @@ def get_all_products():
         if color:
             count_query = count_query.eq('color', color)
         
-        # Determine sort order
-        if sort == 'price-high':
-            order_column = 'price'
-            order_desc = True
-        elif sort == 'price-low':
-            order_column = 'price'
-            order_desc = False
-        else:  # 'newest' or 'popular'
-            order_column = 'created_at'
-            order_desc = True
-        
         # Get paginated data (fetch more if tag filter is applied)
         fetch_limit = limit * 3 if tag_filter_applied else limit
-        response = query.range(offset, offset + fetch_limit).order(order_column, desc=order_desc).execute()
+        response = query.range(offset, offset + fetch_limit).order('created_at', desc=True).execute()
         
         # Process products to include ratings and format images
         products_list = []
@@ -1410,14 +1320,10 @@ def get_all_products():
                 images = [single_image] if single_image else []
             
             products_list.append({
-                'id': product.get('id'),
                 'name': product.get('name', ''),
                 'rating': average_rating,
-                'image_urls': images,  # Array of max 2 images
-                'price': float(product.get('price', 0)),
-                'original_price': float(product.get('original_price', 0)) if product.get('original_price') else None,
-                'category': product.get('category', ''),
-                'tags': product.get('tags', [])
+                'image': images,  # Array of max 2 images
+                'price': float(product.get('price', 0))
             })
             
             # Stop if we have enough items
@@ -2174,456 +2080,308 @@ def test():
         return jsonify({"response": f"Hi {name}"})
 
 # ============================================
-# ADMIN PANEL APIs
+# SIZE CHART MANAGEMENT APIs
 # ============================================
 
-# Dashboard APIs
-@app.route('/api/admin/dashboard/stats', methods=['GET'])
-def admin_dashboard_stats():
+@app.route('/api/admin/size-charts/templates', methods=['GET', 'POST'])
+def admin_size_chart_templates():
     """
-    Get dashboard statistics for admin panel
-    Returns: Total revenue, orders, customers, products, etc.
-    """
-    try:
-        # Get total orders and revenue
-        orders_response = supabase.table('orders').select('id, total, status, created_at').execute()
-        orders = orders_response.data or []
-        
-        total_revenue = sum(float(o.get('total', 0)) for o in orders)
-        total_orders = len(orders)
-        pending_orders = len([o for o in orders if o.get('status') == 'pending'])
-        completed_orders = len([o for o in orders if o.get('status') in ['completed', 'delivered']])
-        failed_orders = len([o for o in orders if o.get('status') == 'failed'])
-        returned_orders = len([o for o in orders if o.get('status') == 'returned'])
-        
-        # Get customers count
-        customers_response = supabase.table('customers').select('id, created_at').execute()
-        customers = customers_response.data or []
-        total_customers = len(customers)
-        
-        # New customers this month
-        current_month = datetime.now().strftime('%Y-%m')
-        new_customers = len([c for c in customers if c.get('created_at', '').startswith(current_month)])
-        
-        # Get products count
-        products_response = supabase.table('products').select('id, stock').execute()
-        products = products_response.data or []
-        total_products = len(products)
-        low_stock_count = len([p for p in products if (p.get('stock') or 0) < 10 and (p.get('stock') or 0) > 0])
-        
-        return jsonify({
-            "success": True,
-            "data": {
-                "total_revenue": round(total_revenue, 2),
-                "total_orders": total_orders,
-                "new_customers": new_customers,
-                "total_products": total_products,
-                "low_stock_count": low_stock_count,
-                "pending_orders": pending_orders,
-                "completed_orders": completed_orders,
-                "failed_orders": failed_orders,
-                "returned_orders": returned_orders,
-                "total_customers": total_customers
-            }
-        }), 200
-        
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
-
-@app.route('/api/admin/dashboard/sales', methods=['GET'])
-def admin_dashboard_sales():
-    """
-    Get sales data for charts
-    Query params: period (week, month, year)
-    """
-    try:
-        period = request.args.get('period', 'month')
-        
-        # Get orders with dates
-        orders_response = supabase.table('orders').select('total, created_at, status').execute()
-        orders = orders_response.data or []
-        
-        # Group by month for simplicity
-        from collections import defaultdict
-        monthly_revenue = defaultdict(float)
-        
-        for order in orders:
-            if order.get('status') not in ['failed', 'cancelled']:
-                created_at = order.get('created_at', '')
-                if created_at:
-                    month = created_at[:7]  # YYYY-MM
-                    monthly_revenue[month] += float(order.get('total', 0))
-        
-        # Sort and format
-        sorted_months = sorted(monthly_revenue.keys())[-7:]  # Last 7 months
-        sales_data = []
-        
-        month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-        
-        for month in sorted_months:
-            month_num = int(month.split('-')[1])
-            sales_data.append({
-                'name': month_names[month_num - 1],
-                'revenue': round(monthly_revenue[month], 2)
-            })
-        
-        return jsonify({
-            "success": True,
-            "data": sales_data
-        }), 200
-        
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
-
-@app.route('/api/admin/dashboard/best-selling', methods=['GET'])
-def admin_dashboard_best_selling():
-    """
-    Get best selling products
-    Query params: limit (default 5)
-    """
-    try:
-        limit = request.args.get('limit', 5, type=int)
-        
-        # Get order items to count sales
-        order_items_response = supabase.table('order_items').select('product_id, quantity').execute()
-        order_items = order_items_response.data or []
-        
-        # Count sales by product
-        from collections import defaultdict
-        product_sales = defaultdict(int)
-        
-        for item in order_items:
-            product_id = item.get('product_id')
-            if product_id:
-                product_sales[product_id] += item.get('quantity', 1)
-        
-        # Get top products
-        top_product_ids = sorted(product_sales.keys(), key=lambda x: product_sales[x], reverse=True)[:limit]
-        
-        # Get product details
-        best_selling = []
-        for product_id in top_product_ids:
-            product_response = supabase.table('products').select('id, name, stock').eq('id', product_id).execute()
-            if product_response.data:
-                product = product_response.data[0]
-                best_selling.append({
-                    'id': product['id'],
-                    'name': product['name'],
-                    'sales': product_sales[product_id],
-                    'stock': product.get('stock', 0)
-                })
-        
-        return jsonify({
-            "success": True,
-            "data": best_selling
-        }), 200
-        
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
-
-@app.route('/api/admin/dashboard/low-stock', methods=['GET'])
-def admin_dashboard_low_stock():
-    """
-    Get low stock items
-    Query params: limit (default 10)
-    """
-    try:
-        limit = request.args.get('limit', 10, type=int)
-        
-        # Get products with low stock
-        products_response = supabase.table('products')\
-            .select('id, name, stock, category')\
-            .lt('stock', 10)\
-            .order('stock', desc=False)\
-            .limit(limit)\
-            .execute()
-        
-        low_stock_items = []
-        for product in products_response.data or []:
-            low_stock_items.append({
-                'id': product['id'],
-                'name': product['name'],
-                'stock': product.get('stock', 0),
-                'category': product.get('category', 'Uncategorized')
-            })
-        
-        return jsonify({
-            "success": True,
-            "data": low_stock_items
-        }), 200
-        
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
-
-# Products Admin APIs
-@app.route('/api/admin/products', methods=['GET', 'POST'])
-def admin_products():
-    """
-    GET: List all products with pagination and filters
-    POST: Create a new product
+    GET: List all size chart templates
+    POST: Create a new size chart template
     """
     try:
         if request.method == 'GET':
-            page = request.args.get('page', 1, type=int)
-            limit = request.args.get('limit', 10, type=int)
-            search = request.args.get('search', '')
-            category = request.args.get('category')
-            status = request.args.get('status')
+            response = supabase.table('size_chart_templates').select('*').order('created_at', desc=True).execute()
+            return jsonify({
+                "success": True,
+                "data": response.data or []
+            }), 200
+        
+        elif request.method == 'POST':
+            data = request.json
+            name = data.get('name')
+            description = data.get('description', '')
             
-            offset = (page - 1) * limit
+            if not name:
+                return jsonify({
+                    "success": False,
+                    "message": "Template name is required"
+                }), 400
             
-            # Build query
-            query = supabase.table('products').select('*', count='exact')
+            response = supabase.table('size_chart_templates').insert({
+                'name': name,
+                'description': description
+            }).execute()
             
-            if search:
-                query = query.ilike('name', f'%{search}%')
-            if category:
-                query = query.eq('category', category)
+            return jsonify({
+                "success": True,
+                "data": response.data[0] if response.data else None,
+                "message": "Template created successfully"
+            }), 201
             
-            # Get total count
-            count_response = query.execute()
-            total = count_response.count or len(count_response.data or [])
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route('/api/admin/size-charts/templates/<int:template_id>', methods=['GET', 'PUT', 'DELETE'])
+def admin_size_chart_template(template_id):
+    """
+    GET: Get a specific size chart template with all its data
+    PUT: Update template name/description
+    DELETE: Delete a template
+    """
+    try:
+        if request.method == 'GET':
+            # Get template
+            template_response = supabase.table('size_chart_templates').select('*').eq('id', template_id).execute()
             
-            # Get paginated results
-            query = supabase.table('products').select('*')
-            if search:
-                query = query.ilike('name', f'%{search}%')
-            if category:
-                query = query.eq('category', category)
+            if not template_response.data:
+                return jsonify({
+                    "success": False,
+                    "message": "Template not found"
+                }), 404
             
-            response = query.order('created_at', desc=True).range(offset, offset + limit - 1).execute()
+            template = template_response.data[0]
             
-            # Format products with stock status
-            products = []
-            for product in response.data or []:
-                stock = product.get('stock', 0)
-                if stock == 0:
-                    product_status = 'out_of_stock'
-                elif stock < 10:
-                    product_status = 'low_stock'
+            # Get rows (sizes)
+            rows_response = supabase.table('size_chart_rows').select('*').eq('template_id', template_id).order('sort_order').execute()
+            rows = rows_response.data or []
+            
+            # Get columns (measurements)
+            columns_response = supabase.table('size_chart_columns').select('*').eq('template_id', template_id).order('sort_order').execute()
+            columns = columns_response.data or []
+            
+            # Get values
+            row_ids = [row['id'] for row in rows]
+            column_ids = [col['id'] for col in columns]
+            
+            values = []
+            values_grid = {}
+            if row_ids and column_ids:
+                values_response = supabase.table('size_chart_values').select('*').in_('row_id', row_ids).in_('column_id', column_ids).execute()
+                values = values_response.data or []
+                
+                # Build grid (row_label -> column_key -> value)
+                row_map = {r['id']: r['size_label'] for r in rows}
+                col_map = {c['id']: c['column_key'] for c in columns}
+                
+                for val in values:
+                    row_label = row_map.get(val['row_id'])
+                    col_key = col_map.get(val['column_id'])
+                    if row_label and col_key:
+                        if row_label not in values_grid:
+                            values_grid[row_label] = {}
+                        values_grid[row_label][col_key] = val['value']
+            
+            # Flat values for backward compatibility
+            value_flat = {}
+            for val in values:
+                key = f"{val['row_id']}_{val['column_id']}"
+                value_flat[key] = val['value']
+            
+            template['rows'] = rows
+            template['columns'] = columns
+            template['values'] = value_flat
+            template['values_grid'] = values_grid
+            
+            return jsonify({
+                "success": True,
+                "data": template
+            }), 200
+        
+        elif request.method == 'PUT':
+            data = request.json
+            update_data = {}
+            if 'name' in data:
+                update_data['name'] = data['name']
+            if 'description' in data:
+                update_data['description'] = data['description']
+            
+            if not update_data:
+                return jsonify({
+                    "success": False,
+                    "message": "No data to update"
+                }), 400
+            
+            response = supabase.table('size_chart_templates').update(update_data).eq('id', template_id).execute()
+            
+            return jsonify({
+                "success": True,
+                "data": response.data[0] if response.data else None,
+                "message": "Template updated successfully"
+            }), 200
+        
+        elif request.method == 'DELETE':
+            # Delete associated values first
+            rows_response = supabase.table('size_chart_rows').select('id').eq('template_id', template_id).execute()
+            row_ids = [r['id'] for r in rows_response.data or []]
+            if row_ids:
+                supabase.table('size_chart_values').delete().in_('row_id', row_ids).execute()
+            
+            # Delete rows and columns
+            supabase.table('size_chart_rows').delete().eq('template_id', template_id).execute()
+            supabase.table('size_chart_columns').delete().eq('template_id', template_id).execute()
+            
+            # Delete template
+            supabase.table('size_chart_templates').delete().eq('id', template_id).execute()
+            
+            return jsonify({
+                "success": True,
+                "message": "Template deleted successfully"
+            }), 200
+            
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route('/api/admin/size-charts/templates/<int:template_id>/rows', methods=['POST'])
+def admin_size_chart_add_row(template_id):
+    """Add a new size row to a template"""
+    try:
+        data = request.json
+        size_label = data.get('size_label')
+        sort_order = data.get('sort_order', 0)
+        
+        if not size_label:
+            return jsonify({
+                "success": False,
+                "message": "Size label is required"
+            }), 400
+        
+        response = supabase.table('size_chart_rows').insert({
+            'template_id': template_id,
+            'size_label': size_label,
+            'sort_order': sort_order
+        }).execute()
+        
+        return jsonify({
+            "success": True,
+            "data": response.data[0] if response.data else None,
+            "message": "Row added successfully"
+        }), 201
+        
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route('/api/admin/size-charts/templates/<int:template_id>/rows/<int:row_id>', methods=['DELETE'])
+def admin_size_chart_delete_row(template_id, row_id):
+    """Delete a size row"""
+    try:
+        # Delete associated values first
+        supabase.table('size_chart_values').delete().eq('row_id', row_id).execute()
+        
+        # Delete row
+        supabase.table('size_chart_rows').delete().eq('id', row_id).execute()
+        
+        return jsonify({
+            "success": True,
+            "message": "Row deleted successfully"
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route('/api/admin/size-charts/templates/<int:template_id>/columns', methods=['POST'])
+def admin_size_chart_add_column(template_id):
+    """Add a new measurement column to a template"""
+    try:
+        data = request.json
+        column_key = data.get('column_key')
+        display_name = data.get('display_name')
+        unit = data.get('unit', 'cm')
+        sort_order = data.get('sort_order', 0)
+        
+        if not column_key or not display_name:
+            return jsonify({
+                "success": False,
+                "message": "Column key and display name are required"
+            }), 400
+        
+        response = supabase.table('size_chart_columns').insert({
+            'template_id': template_id,
+            'column_key': column_key,
+            'display_name': display_name,
+            'unit': unit,
+            'sort_order': sort_order
+        }).execute()
+        
+        return jsonify({
+            "success": True,
+            "data": response.data[0] if response.data else None,
+            "message": "Column added successfully"
+        }), 201
+        
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route('/api/admin/size-charts/templates/<int:template_id>/columns/<int:column_id>', methods=['DELETE'])
+def admin_size_chart_delete_column(template_id, column_id):
+    """Delete a measurement column"""
+    try:
+        # Delete associated values first
+        supabase.table('size_chart_values').delete().eq('column_id', column_id).execute()
+        
+        # Delete column
+        supabase.table('size_chart_columns').delete().eq('id', column_id).execute()
+        
+        return jsonify({
+            "success": True,
+            "message": "Column deleted successfully"
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route('/api/admin/size-charts/templates/<int:template_id>/values', methods=['PUT'])
+def admin_size_chart_update_values(template_id):
+    """Update size chart values"""
+    try:
+        data = request.json
+        values = data.get('values', [])
+        
+        for val in values:
+            row_id = val.get('row_id')
+            column_id = val.get('column_id')
+            value = val.get('value', '')
+            
+            if row_id and column_id:
+                # Upsert value
+                existing = supabase.table('size_chart_values').select('id').eq('row_id', row_id).eq('column_id', column_id).execute()
+                
+                if existing.data:
+                    supabase.table('size_chart_values').update({'value': value}).eq('id', existing.data[0]['id']).execute()
                 else:
-                    product_status = 'active'
-                
-                # Get average rating
-                reviews_response = supabase.table('reviews').select('rating').eq('product_id', product['id']).execute()
-                ratings = [r['rating'] for r in reviews_response.data if r.get('rating')]
-                avg_rating = round(sum(ratings) / len(ratings), 1) if ratings else 0
-                
-                products.append({
-                    'id': product['id'],
-                    'name': product.get('name', ''),
-                    'description': product.get('description', ''),
-                    'category': product.get('category', ''),
-                    'price': float(product.get('price', 0)),
-                    'original_price': float(product.get('original_price', 0)) if product.get('original_price') else None,
-                    'image_url': product.get('image_url'),
-                    'image_urls': product.get('image_urls', []),
-                    'color': product.get('color', []),
-                    'size': product.get('size', []),
-                    'tags': product.get('tags', []),
-                    'stock': stock,
-                    'status': product_status,
-                    'rating': avg_rating,
-                    'created_at': product.get('created_at'),
-                    'updated_at': product.get('updated_at')
-                })
-            
-            return jsonify({
-                "success": True,
-                "data": products,
-                "pagination": {
-                    "page": page,
-                    "limit": limit,
-                    "total": total,
-                    "total_pages": (total + limit - 1) // limit if total > 0 else 0
-                }
-            }), 200
-            
-        elif request.method == 'POST':
-            data = request.json
-            
-            product_data = {
-                'name': data.get('name'),
-                'description': data.get('description', ''),
-                'category': data.get('category'),
-                'price': data.get('price'),
-                'original_price': data.get('original_price'),
-                'image_url': data.get('image_url'),
-                'image_urls': data.get('image_urls', []),
-                'color': data.get('color', []),
-                'size': data.get('size', []),
-                'tags': data.get('tags', []),
-                'stock': data.get('stock', 0)
-            }
-            
-            response = supabase.table('products').insert(product_data).execute()
-            
-            return jsonify({
-                "success": True,
-                "data": response.data[0] if response.data else None,
-                "message": "Product created successfully"
-            }), 201
-            
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
-
-@app.route('/api/admin/products/<product_id>', methods=['GET', 'PUT', 'DELETE'])
-def admin_product_detail(product_id):
-    """
-    GET: Get product details
-    PUT: Update product
-    DELETE: Delete product
-    """
-    try:
-        if request.method == 'GET':
-            response = supabase.table('products').select('*').eq('id', product_id).execute()
-            
-            if not response.data:
-                return jsonify({
-                    "success": False,
-                    "message": "Product not found"
-                }), 404
-            
-            product = response.data[0]
-            
-            # Get reviews
-            reviews_response = supabase.table('reviews').select('rating').eq('product_id', product_id).execute()
-            ratings = [r['rating'] for r in reviews_response.data if r.get('rating')]
-            avg_rating = round(sum(ratings) / len(ratings), 1) if ratings else 0
-            
-            # Get order items for sales count
-            order_items_response = supabase.table('order_items').select('quantity').eq('product_id', product_id).execute()
-            total_sold = sum(item.get('quantity', 0) for item in order_items_response.data or [])
-            
-            product['rating'] = avg_rating
-            product['total_sold'] = total_sold
-            
-            return jsonify({
-                "success": True,
-                "data": product
-            }), 200
-            
-        elif request.method == 'PUT':
-            data = request.json
-            
-            update_data = {}
-            allowed_fields = ['name', 'description', 'category', 'price', 'original_price', 
-                            'image_url', 'image_urls', 'color', 'size', 'tags', 'stock']
-            
-            for field in allowed_fields:
-                if field in data:
-                    update_data[field] = data[field]
-            
-            if update_data:
-                update_data['updated_at'] = datetime.now().isoformat()
-                response = supabase.table('products').update(update_data).eq('id', product_id).execute()
-                
-                return jsonify({
-                    "success": True,
-                    "data": response.data[0] if response.data else None,
-                    "message": "Product updated successfully"
-                }), 200
-            
-            return jsonify({
-                "success": False,
-                "message": "No fields to update"
-            }), 400
-            
-        elif request.method == 'DELETE':
-            response = supabase.table('products').delete().eq('id', product_id).execute()
-            
-            return jsonify({
-                "success": True,
-                "message": "Product deleted successfully"
-            }), 200
-            
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
-
-# Orders Admin APIs
-@app.route('/api/admin/orders', methods=['GET'])
-def admin_orders():
-    """
-    Get all orders with pagination and filters
-    """
-    try:
-        page = request.args.get('page', 1, type=int)
-        limit = request.args.get('limit', 10, type=int)
-        search = request.args.get('search', '')
-        status = request.args.get('status')
-        
-        offset = (page - 1) * limit
-        
-        # Build query
-        query = supabase.table('orders').select('*, customers(full_name, email, phone_number)', count='exact')
-        
-        if status and status != 'all':
-            query = query.eq('status', status)
-        
-        response = query.order('created_at', desc=True).range(offset, offset + limit - 1).execute()
-        
-        # Format orders
-        orders = []
-        for order in response.data or []:
-            customer = order.get('customers', {})
-            
-            # Get order items
-            items_response = supabase.table('order_items').select('*').eq('order_id', order['id']).execute()
-            items_count = len(items_response.data or [])
-            
-            order_id = order['id']
-            order_number = f"ORD-{order_id[:8].upper()}" if order_id else 'N/A'
-            
-            orders.append({
-                'id': order['id'],
-                'order_number': order_number,
-                'customer': customer.get('full_name', 'Unknown'),
-                'email': customer.get('email', ''),
-                'phone': customer.get('phone_number', ''),
-                'date': order.get('created_at', ''),
-                'status': order.get('status', 'pending'),
-                'total': float(order.get('total', 0)),
-                'subtotal': float(order.get('subtotal', 0)),
-                'discount': float(order.get('discount', 0)),
-                'delivery_fee': float(order.get('delivery_fee', 0)),
-                'items_count': items_count,
-                'payment_method': order.get('payment_method', 'N/A')
-            })
-        
-        # Apply search filter (on customer name/email)
-        if search:
-            search_lower = search.lower()
-            orders = [o for o in orders if search_lower in o['customer'].lower() or 
-                     search_lower in o['email'].lower() or 
-                     search_lower in o['order_number'].lower()]
+                    supabase.table('size_chart_values').insert({
+                        'row_id': row_id,
+                        'column_id': column_id,
+                        'value': value
+                    }).execute()
         
         return jsonify({
             "success": True,
-            "data": orders,
-            "pagination": {
-                "page": page,
-                "limit": limit,
-                "total": response.count or len(orders),
-                "total_pages": ((response.count or len(orders)) + limit - 1) // limit
-            }
+            "message": "Values updated successfully"
         }), 200
         
     except Exception as e:
@@ -2632,90 +2390,69 @@ def admin_orders():
             "error": str(e)
         }), 500
 
-@app.route('/api/admin/orders/<order_id>', methods=['GET'])
-def admin_order_detail(order_id):
-    """
-    Get order details with items
-    """
-    try:
-        response = supabase.table('orders').select('*, customers(*)').eq('id', order_id).execute()
-        
-        if not response.data:
-            return jsonify({
-                "success": False,
-                "message": "Order not found"
-            }), 404
-        
-        order = response.data[0]
-        
-        # Get order items with product details
-        items_response = supabase.table('order_items')\
-            .select('*, products(name, image_url, image_urls)')\
-            .eq('order_id', order_id)\
-            .execute()
-        
-        items = []
-        for item in items_response.data or []:
-            product = item.get('products', {})
-            image_urls = product.get('image_urls', [])
-            image = image_urls[0] if image_urls else product.get('image_url', '')
-            
-            items.append({
-                'id': item['id'],
-                'product_id': item['product_id'],
-                'product_name': product.get('name', 'Unknown Product'),
-                'size': item.get('size'),
-                'color': item.get('color'),
-                'quantity': item.get('quantity', 1),
-                'price': float(item.get('price', 0)),
-                'image_url': image
-            })
-        
-        order['items'] = items
-        order['order_number'] = f"ORD-{order['id'][:8].upper()}"
-        
-        return jsonify({
-            "success": True,
-            "data": order
-        }), 200
-        
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
 
-@app.route('/api/admin/orders/<order_id>/status', methods=['PUT'])
-def admin_update_order_status(order_id):
-    """
-    Update order status
-    """
+@app.route('/api/admin/size-charts/templates/<int:template_id>/structure', methods=['PUT'])
+def admin_size_chart_bulk_update(template_id):
+    """Bulk update template structure (rows, columns, values)"""
     try:
         data = request.json
-        new_status = data.get('status')
+        rows_data = data.get('rows', [])
+        columns_data = data.get('columns', [])
+        values_data = data.get('values', [])
         
-        valid_statuses = ['pending', 'processing', 'shipped', 'delivered', 'completed', 'cancelled', 'failed', 'returned']
-        if new_status not in valid_statuses:
-            return jsonify({
-                "success": False,
-                "message": f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
-            }), 400
+        # Get existing rows and columns
+        existing_rows_response = supabase.table('size_chart_rows').select('id').eq('template_id', template_id).execute()
+        existing_row_ids = [r['id'] for r in existing_rows_response.data or []]
         
-        response = supabase.table('orders').update({
-            'status': new_status,
-            'updated_at': datetime.now().isoformat()
-        }).eq('id', order_id).execute()
+        # Delete existing values, rows, columns
+        if existing_row_ids:
+            supabase.table('size_chart_values').delete().in_('row_id', existing_row_ids).execute()
+        supabase.table('size_chart_rows').delete().eq('template_id', template_id).execute()
+        supabase.table('size_chart_columns').delete().eq('template_id', template_id).execute()
         
-        if not response.data:
-            return jsonify({
-                "success": False,
-                "message": "Order not found"
-            }), 404
+        # Insert new rows
+        row_map = {}
+        for row in rows_data:
+            response = supabase.table('size_chart_rows').insert({
+                'template_id': template_id,
+                'size_label': row['size_label'],
+                'sort_order': row.get('sort_order', 0)
+            }).execute()
+            if response.data:
+                row_map[row['size_label']] = response.data[0]['id']
+        
+        # Insert new columns
+        col_map = {}
+        for col in columns_data:
+            response = supabase.table('size_chart_columns').insert({
+                'template_id': template_id,
+                'column_key': col['column_key'],
+                'display_name': col['display_name'],
+                'unit': col.get('unit', 'cm'),
+                'sort_order': col.get('sort_order', 0)
+            }).execute()
+            if response.data:
+                col_map[col['column_key']] = response.data[0]['id']
+        
+        # Insert values
+        for val in values_data:
+            row_label = val.get('row_label')
+            col_key = val.get('column_key')
+            value = val.get('value', '')
+            
+            row_id = row_map.get(row_label)
+            col_id = col_map.get(col_key)
+            
+            if row_id and col_id:
+                supabase.table('size_chart_values').insert({
+                    'row_id': row_id,
+                    'column_id': col_id,
+                    'value': value
+                }).execute()
         
         return jsonify({
             "success": True,
-            "data": response.data[0],
-            "message": f"Order status updated to {new_status}"
+            "message": "Template structure updated successfully"
         }), 200
         
     except Exception as e:
@@ -2724,731 +2461,6 @@ def admin_update_order_status(order_id):
             "error": str(e)
         }), 500
 
-@app.route('/api/admin/orders/stats', methods=['GET'])
-def admin_orders_stats():
-    """
-    Get order statistics
-    """
-    try:
-        orders_response = supabase.table('orders').select('status').execute()
-        orders = orders_response.data or []
-        
-        stats = {
-            'pending': 0,
-            'processing': 0,
-            'completed': 0,
-            'failed': 0,
-            'returned': 0
-        }
-        
-        for order in orders:
-            status = order.get('status', 'pending')
-            if status in ['completed', 'delivered']:
-                stats['completed'] += 1
-            elif status in stats:
-                stats[status] += 1
-        
-        return jsonify({
-            "success": True,
-            "data": stats
-        }), 200
-        
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
-
-# Customers Admin APIs
-@app.route('/api/admin/customers', methods=['GET'])
-def admin_customers():
-    """
-    Get all customers with pagination
-    """
-    try:
-        page = request.args.get('page', 1, type=int)
-        limit = request.args.get('limit', 10, type=int)
-        search = request.args.get('search', '')
-        
-        offset = (page - 1) * limit
-        
-        # Get customers
-        query = supabase.table('customers').select('*', count='exact')
-        
-        if search:
-            query = query.or_(f"full_name.ilike.%{search}%,email.ilike.%{search}%")
-        
-        response = query.order('created_at', desc=True).range(offset, offset + limit - 1).execute()
-        
-        # Get order stats for each customer
-        customers = []
-        for customer in response.data or []:
-            user_id = customer.get('user_id')
-            
-            # Get orders count and total spent
-            if user_id:
-                orders_response = supabase.table('orders').select('total, status').eq('user_id', user_id).execute()
-                orders = orders_response.data or []
-                orders_count = len(orders)
-                total_spent = sum(float(o.get('total', 0)) for o in orders if o.get('status') not in ['cancelled', 'failed'])
-            else:
-                orders_count = 0
-                total_spent = 0
-            
-            customers.append({
-                'id': customer['id'],
-                'user_id': customer.get('user_id'),
-                'full_name': customer.get('full_name', 'Unknown'),
-                'email': customer.get('email', ''),
-                'phone_number': customer.get('phone_number', ''),
-                'district': customer.get('district', ''),
-                'thana': customer.get('thana', ''),
-                'full_address': customer.get('full_address', ''),
-                'status': 'active',  # Can be determined by last order date
-                'created_at': customer.get('created_at'),
-                'orders_count': orders_count,
-                'total_spent': round(total_spent, 2)
-            })
-        
-        return jsonify({
-            "success": True,
-            "data": customers,
-            "pagination": {
-                "page": page,
-                "limit": limit,
-                "total": response.count or len(customers),
-                "total_pages": ((response.count or len(customers)) + limit - 1) // limit
-            }
-        }), 200
-        
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
-
-@app.route('/api/admin/customers/<customer_id>', methods=['GET'])
-def admin_customer_detail(customer_id):
-    """
-    Get customer details
-    """
-    try:
-        response = supabase.table('customers').select('*').eq('id', customer_id).execute()
-        
-        if not response.data:
-            return jsonify({
-                "success": False,
-                "message": "Customer not found"
-            }), 404
-        
-        customer = response.data[0]
-        
-        # Get orders
-        user_id = customer.get('user_id')
-        if user_id:
-            orders_response = supabase.table('orders').select('*').eq('user_id', user_id).order('created_at', desc=True).execute()
-            orders = orders_response.data or []
-            orders_count = len(orders)
-            total_spent = sum(float(o.get('total', 0)) for o in orders if o.get('status') not in ['cancelled', 'failed'])
-        else:
-            orders = []
-            orders_count = 0
-            total_spent = 0
-        
-        customer['orders'] = orders
-        customer['orders_count'] = orders_count
-        customer['total_spent'] = round(total_spent, 2)
-        
-        return jsonify({
-            "success": True,
-            "data": customer
-        }), 200
-        
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
-
-@app.route('/api/admin/customers/<customer_id>/orders', methods=['GET'])
-def admin_customer_orders(customer_id):
-    """
-    Get customer's orders
-    """
-    try:
-        # Get customer to find user_id
-        customer_response = supabase.table('customers').select('user_id').eq('id', customer_id).execute()
-        
-        if not customer_response.data:
-            return jsonify({
-                "success": False,
-                "message": "Customer not found"
-            }), 404
-        
-        user_id = customer_response.data[0].get('user_id')
-        
-        if not user_id:
-            return jsonify({
-                "success": True,
-                "data": []
-            }), 200
-        
-        # Get orders
-        orders_response = supabase.table('orders').select('*').eq('user_id', user_id).order('created_at', desc=True).execute()
-        
-        return jsonify({
-            "success": True,
-            "data": orders_response.data or []
-        }), 200
-        
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
-
-@app.route('/api/admin/customers/stats', methods=['GET'])
-def admin_customers_stats():
-    """
-    Get customer statistics
-    """
-    try:
-        customers_response = supabase.table('customers').select('id, created_at').execute()
-        customers = customers_response.data or []
-        
-        total = len(customers)
-        
-        # New this month
-        current_month = datetime.now().strftime('%Y-%m')
-        new_this_month = len([c for c in customers if c.get('created_at', '').startswith(current_month)])
-        
-        # Get total revenue
-        orders_response = supabase.table('orders').select('total, status').execute()
-        orders = orders_response.data or []
-        total_revenue = sum(float(o.get('total', 0)) for o in orders if o.get('status') not in ['cancelled', 'failed'])
-        
-        return jsonify({
-            "success": True,
-            "data": {
-                "total": total,
-                "active": total,  # Simplified - all are considered active
-                "new_this_month": new_this_month,
-                "total_revenue": round(total_revenue, 2)
-            }
-        }), 200
-        
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
-
-# Discounts Admin APIs
-@app.route('/api/admin/discounts', methods=['GET', 'POST'])
-def admin_discounts():
-    """
-    GET: List all discounts
-    POST: Create a new discount
-    """
-    try:
-        if request.method == 'GET':
-            page = request.args.get('page', 1, type=int)
-            limit = request.args.get('limit', 10, type=int)
-            search = request.args.get('search', '')
-            status = request.args.get('status')
-            
-            offset = (page - 1) * limit
-            
-            query = supabase.table('discounts').select('*', count='exact')
-            
-            if search:
-                query = query.ilike('code', f'%{search}%')
-            if status and status != 'all':
-                query = query.eq('status', status)
-            
-            response = query.order('created_at', desc=True).range(offset, offset + limit - 1).execute()
-            
-            # Format discounts
-            discounts = []
-            for discount in response.data or []:
-                exp_date = discount.get('expiration_date', '')
-                is_expired = datetime.strptime(exp_date, '%Y-%m-%d').date() < datetime.now().date() if exp_date else False
-                
-                discounts.append({
-                    'id': discount['id'],
-                    'code': discount.get('code', ''),
-                    'discount': discount.get('discount', 0),
-                    'type': discount.get('type', 'percentage'),
-                    'expiration_date': exp_date,
-                    'status': 'expired' if is_expired else discount.get('status', 'active'),
-                    'usage_count': discount.get('usage_count', 0),
-                    'usage_limit': discount.get('usage_limit', 100),
-                    'min_order_value': discount.get('min_order_value', 0),
-                    'created_at': discount.get('created_at')
-                })
-            
-            return jsonify({
-                "success": True,
-                "data": discounts,
-                "pagination": {
-                    "page": page,
-                    "limit": limit,
-                    "total": response.count or len(discounts),
-                    "total_pages": ((response.count or len(discounts)) + limit - 1) // limit
-                }
-            }), 200
-            
-        elif request.method == 'POST':
-            data = request.json
-            
-            discount_data = {
-                'code': data.get('code', '').upper(),
-                'discount': data.get('discount', 0),
-                'type': data.get('type', 'percentage'),
-                'expiration_date': data.get('expiration_date'),
-                'status': 'active',
-                'usage_count': 0,
-                'usage_limit': data.get('usage_limit', 100),
-                'min_order_value': data.get('min_order_value', 0)
-            }
-            
-            response = supabase.table('discounts').insert(discount_data).execute()
-            
-            return jsonify({
-                "success": True,
-                "data": response.data[0] if response.data else None,
-                "message": "Discount created successfully"
-            }), 201
-            
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
-
-@app.route('/api/admin/discounts/<discount_id>', methods=['GET', 'PUT', 'DELETE'])
-def admin_discount_detail(discount_id):
-    """
-    GET: Get discount details
-    PUT: Update discount
-    DELETE: Delete discount
-    """
-    try:
-        if request.method == 'GET':
-            response = supabase.table('discounts').select('*').eq('id', discount_id).execute()
-            
-            if not response.data:
-                return jsonify({
-                    "success": False,
-                    "message": "Discount not found"
-                }), 404
-            
-            return jsonify({
-                "success": True,
-                "data": response.data[0]
-            }), 200
-            
-        elif request.method == 'PUT':
-            data = request.json
-            
-            update_data = {}
-            allowed_fields = ['code', 'discount', 'type', 'expiration_date', 'status', 'usage_limit', 'min_order_value']
-            
-            for field in allowed_fields:
-                if field in data:
-                    update_data[field] = data[field]
-            
-            if 'code' in update_data:
-                update_data['code'] = update_data['code'].upper()
-            
-            if update_data:
-                response = supabase.table('discounts').update(update_data).eq('id', discount_id).execute()
-                
-                return jsonify({
-                    "success": True,
-                    "data": response.data[0] if response.data else None,
-                    "message": "Discount updated successfully"
-                }), 200
-            
-            return jsonify({
-                "success": False,
-                "message": "No fields to update"
-            }), 400
-            
-        elif request.method == 'DELETE':
-            response = supabase.table('discounts').delete().eq('id', discount_id).execute()
-            
-            return jsonify({
-                "success": True,
-                "message": "Discount deleted successfully"
-            }), 200
-            
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
-
-@app.route('/api/admin/discounts/stats', methods=['GET'])
-def admin_discounts_stats():
-    """
-    Get discount statistics
-    """
-    try:
-        discounts_response = supabase.table('discounts').select('*').execute()
-        discounts = discounts_response.data or []
-        
-        active = 0
-        expired = 0
-        total_uses = 0
-        
-        for discount in discounts:
-            exp_date = discount.get('expiration_date', '')
-            is_expired = datetime.strptime(exp_date, '%Y-%m-%d').date() < datetime.now().date() if exp_date else False
-            
-            if is_expired or discount.get('status') == 'expired':
-                expired += 1
-            elif discount.get('status') == 'active':
-                active += 1
-            
-            total_uses += discount.get('usage_count', 0)
-        
-        return jsonify({
-            "success": True,
-            "data": {
-                "active": active,
-                "total_uses": total_uses,
-                "discount_value_given": 0,  # Would need order data to calculate
-                "expired": expired
-            }
-        }), 200
-        
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
-
-# Stock Management Admin APIs
-@app.route('/api/admin/stock/overview', methods=['GET'])
-def admin_stock_overview():
-    """
-    Get stock overview by category
-    """
-    try:
-        products_response = supabase.table('products').select('id, category, stock, price').execute()
-        products = products_response.data or []
-        
-        from collections import defaultdict
-        categories = defaultdict(lambda: {'total_items': 0, 'low_stock': 0, 'out_of_stock': 0, 'value': 0})
-        
-        for product in products:
-            category = product.get('category', 'Uncategorized')
-            stock = product.get('stock', 0)
-            price = float(product.get('price', 0))
-            
-            categories[category]['total_items'] += 1
-            categories[category]['value'] += price * stock
-            
-            if stock == 0:
-                categories[category]['out_of_stock'] += 1
-            elif stock < 10:
-                categories[category]['low_stock'] += 1
-        
-        overview = [
-            {
-                'category': cat,
-                'total_items': data['total_items'],
-                'low_stock': data['low_stock'],
-                'out_of_stock': data['out_of_stock'],
-                'value': round(data['value'], 2)
-            }
-            for cat, data in categories.items()
-        ]
-        
-        return jsonify({
-            "success": True,
-            "data": overview
-        }), 200
-        
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
-
-@app.route('/api/admin/stock/low-stock', methods=['GET'])
-def admin_low_stock_products():
-    """
-    Get products with low stock
-    """
-    try:
-        limit = request.args.get('limit', 10, type=int)
-        
-        response = supabase.table('products')\
-            .select('id, name, category, stock')\
-            .lt('stock', 10)\
-            .gt('stock', 0)\
-            .order('stock', desc=False)\
-            .limit(limit)\
-            .execute()
-        
-        products = []
-        for product in response.data or []:
-            products.append({
-                'id': product['id'],
-                'name': product.get('name', ''),
-                'category': product.get('category', ''),
-                'current_stock': product.get('stock', 0),
-                'minimum_stock': 10  # Default minimum
-            })
-        
-        return jsonify({
-            "success": True,
-            "data": products
-        }), 200
-        
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
-
-@app.route('/api/admin/stock/out-of-stock', methods=['GET'])
-def admin_out_of_stock_products():
-    """
-    Get out of stock products
-    """
-    try:
-        response = supabase.table('products')\
-            .select('id, name, category, updated_at')\
-            .eq('stock', 0)\
-            .execute()
-        
-        products = []
-        for product in response.data or []:
-            products.append({
-                'id': product['id'],
-                'name': product.get('name', ''),
-                'category': product.get('category', ''),
-                'last_order_date': product.get('updated_at')
-            })
-        
-        return jsonify({
-            "success": True,
-            "data": products
-        }), 200
-        
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
-
-@app.route('/api/admin/stock/<product_id>', methods=['PUT'])
-def admin_update_stock(product_id):
-    """
-    Update product stock
-    """
-    try:
-        data = request.json
-        stock = data.get('stock')
-        
-        if stock is None or stock < 0:
-            return jsonify({
-                "success": False,
-                "message": "Valid stock value is required"
-            }), 400
-        
-        response = supabase.table('products').update({
-            'stock': stock,
-            'updated_at': datetime.now().isoformat()
-        }).eq('id', product_id).execute()
-        
-        if not response.data:
-            return jsonify({
-                "success": False,
-                "message": "Product not found"
-            }), 404
-        
-        return jsonify({
-            "success": True,
-            "message": "Stock updated successfully"
-        }), 200
-        
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
-
-# Analytics Admin APIs
-@app.route('/api/admin/analytics/revenue', methods=['GET'])
-def admin_analytics_revenue():
-    """
-    Get revenue analytics
-    """
-    try:
-        period = request.args.get('period', 'month')
-        
-        orders_response = supabase.table('orders').select('total, created_at, status').execute()
-        orders = orders_response.data or []
-        
-        from collections import defaultdict
-        monthly_revenue = defaultdict(float)
-        
-        for order in orders:
-            if order.get('status') not in ['failed', 'cancelled']:
-                created_at = order.get('created_at', '')
-                if created_at:
-                    month = created_at[:7]
-                    monthly_revenue[month] += float(order.get('total', 0))
-        
-        sorted_months = sorted(monthly_revenue.keys())[-6:]
-        
-        month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-        labels = []
-        data = []
-        
-        for month in sorted_months:
-            month_num = int(month.split('-')[1])
-            labels.append(month_names[month_num - 1])
-            data.append(round(monthly_revenue[month], 2))
-        
-        total = sum(data)
-        growth = ((data[-1] - data[-2]) / data[-2] * 100) if len(data) >= 2 and data[-2] > 0 else 0
-        
-        return jsonify({
-            "success": True,
-            "data": {
-                "labels": labels,
-                "data": data,
-                "total": round(total, 2),
-                "growth": round(growth, 1)
-            }
-        }), 200
-        
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
-
-@app.route('/api/admin/analytics/orders', methods=['GET'])
-def admin_analytics_orders():
-    """
-    Get orders analytics
-    """
-    try:
-        orders_response = supabase.table('orders').select('created_at, status').execute()
-        orders = orders_response.data or []
-        
-        from collections import defaultdict
-        monthly_orders = defaultdict(int)
-        
-        for order in orders:
-            created_at = order.get('created_at', '')
-            if created_at:
-                month = created_at[:7]
-                monthly_orders[month] += 1
-        
-        sorted_months = sorted(monthly_orders.keys())[-6:]
-        
-        month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-        labels = []
-        data = []
-        
-        for month in sorted_months:
-            month_num = int(month.split('-')[1])
-            labels.append(month_names[month_num - 1])
-            data.append(monthly_orders[month])
-        
-        total = sum(data)
-        growth = ((data[-1] - data[-2]) / data[-2] * 100) if len(data) >= 2 and data[-2] > 0 else 0
-        
-        return jsonify({
-            "success": True,
-            "data": {
-                "labels": labels,
-                "data": data,
-                "total": total,
-                "growth": round(growth, 1)
-            }
-        }), 200
-        
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
-
-@app.route('/api/admin/analytics/products', methods=['GET'])
-def admin_analytics_products():
-    """
-    Get products analytics
-    """
-    try:
-        products_response = supabase.table('products').select('category, stock').execute()
-        products = products_response.data or []
-        
-        from collections import defaultdict
-        by_category = defaultdict(int)
-        by_status = {'in_stock': 0, 'low_stock': 0, 'out_of_stock': 0}
-        
-        for product in products:
-            category = product.get('category', 'Uncategorized')
-            stock = product.get('stock', 0)
-            
-            by_category[category] += 1
-            
-            if stock == 0:
-                by_status['out_of_stock'] += 1
-            elif stock < 10:
-                by_status['low_stock'] += 1
-            else:
-                by_status['in_stock'] += 1
-        
-        return jsonify({
-            "success": True,
-            "data": {
-                "by_category": [{'category': cat, 'count': count} for cat, count in by_category.items()],
-                "by_status": [{'status': status, 'count': count} for status, count in by_status.items()]
-            }
-        }), 200
-        
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
-
-@app.route('/api/admin/analytics/customers', methods=['GET'])
-def admin_analytics_customers():
-    """
-    Get customers analytics
-    """
-    try:
-        customers_response = supabase.table('customers').select('id, created_at').execute()
-        customers = customers_response.data or []
-        
-        current_month = datetime.now().strftime('%Y-%m')
-        new_customers = len([c for c in customers if c.get('created_at', '').startswith(current_month)])
-        returning_customers = len(customers) - new_customers
-        
-        return jsonify({
-            "success": True,
-            "data": {
-                "new_customers": new_customers,
-                "returning_customers": returning_customers,
-                "churn_rate": 0  # Would need more data to calculate
-            }
-        }), 200
-        
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
 
 if __name__ == '__main__':
     app.run(debug=True, port=1581)

@@ -8,7 +8,8 @@ import {
   Percent, 
   Settings,
   Home,
-  Truck
+  Truck,
+  Ruler
 } from "lucide-react";
 import { cn } from "./ui/utils";
 
@@ -26,6 +27,7 @@ const navigationItems = [
   { id: 'suppliers', label: 'Suppliers', icon: Truck },
   { id: 'analytics', label: 'Analytics', icon: TrendingUp },
   { id: 'stock', label: 'Stock', icon: Archive },
+  { id: 'sizecharts', label: 'Size Charts', icon: Ruler },
   { id: 'discounts', label: 'Discounts', icon: Percent },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
