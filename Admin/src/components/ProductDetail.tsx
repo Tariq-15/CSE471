@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -8,99 +8,238 @@ import { Textarea } from "./ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
-import { ArrowLeft, Edit, Save, Plus, Trash2, Image, Package } from "lucide-react";
-import { ImageWithFallback } from "./figma/ImageWithFallback";
+import { ArrowLeft, Edit, Save, Package, Loader2, Ruler, Image as ImageIcon } from "lucide-react";
+import { ImageUpload } from "./ImageUpload";
+import { getProduct, updateProduct, getSizeChartTemplates, getSizeChartTemplate } from "@/lib/api";
+import type { Product, SizeChartTemplate } from "@/lib/api";
 
 interface ProductDetailProps {
-  productId: number;
+  productId: string;
   onBack: () => void;
 }
 
-const mockProduct = {
-  id: 1,
-  name: "Classic Denim Jacket",
-  description: "A timeless denim jacket crafted from premium cotton denim. Features classic styling with button closure, chest pockets, and a comfortable regular fit. Perfect for layering in any season.",
-  category: "Outerwear",
-  brand: "Unleashed",
-  tags: ["denim", "casual", "classic", "outerwear"],
-  status: "active",
-  createdDate: "2024-08-15",
-  lastUpdated: "2024-09-20",
-  totalStock: 45,
-  totalSold: 234,
-  variations: [
-    {
-      id: 1,
-      sku: "DJ-001-S-BLU",
-      size: "S",
-      color: "Blue",
-      colorHex: "#1E40AF",
-      price: 89.99,
-      stock: 12,
-      sold: 45,
-      image: "/api/placeholder/300/300"
-    },
-    {
-      id: 2,
-      sku: "DJ-001-M-BLU",
-      size: "M", 
-      color: "Blue",
-      colorHex: "#1E40AF",
-      price: 89.99,
-      stock: 18,
-      sold: 67,
-      image: "/api/placeholder/300/300"
-    },
-    {
-      id: 3,
-      sku: "DJ-001-L-BLU",
-      size: "L",
-      color: "Blue", 
-      colorHex: "#1E40AF",
-      price: 89.99,
-      stock: 15,
-      sold: 78,
-      image: "/api/placeholder/300/300"
-    },
-    {
-      id: 4,
-      sku: "DJ-001-S-BLK",
-      size: "S",
-      color: "Black",
-      colorHex: "#000000",
-      price: 94.99,
-      stock: 8,
-      sold: 23,
-      image: "/api/placeholder/300/300"
-    },
-    {
-      id: 5,
-      sku: "DJ-001-M-BLK",
-      size: "M",
-      color: "Black",
-      colorHex: "#000000", 
-      price: 94.99,
-      stock: 0,
-      sold: 21,
-      image: "/api/placeholder/300/300"
-    }
-  ]
-};
+interface SizeStock {
+  size_label: string;
+  stock: number;
+  row_id: number;
+}
 
 export function ProductDetail({ productId, onBack }: ProductDetailProps) {
-  const [product, setProduct] = useState(mockProduct);
+  const [product, setProduct] = useState<Product | null>(null);
+  const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
-  const [isAddVariationOpen, setIsAddVariationOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  
+  // Size Chart Template State
+  const [templates, setTemplates] = useState<SizeChartTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const [sizeStocks, setSizeStocks] = useState<SizeStock[]>([]);
+  const [loadingTemplate, setLoadingTemplate] = useState(false);
 
-  const getStockStatus = (stock: number) => {
-    if (stock === 0) return { label: "Out of Stock", variant: "destructive" as const };
-    if (stock < 10) return { label: "Low Stock", variant: "secondary" as const };
-    return { label: "In Stock", variant: "default" as const };
+  // Image state
+  const [productImages, setProductImages] = useState<string[]>([]);
+
+  // Form state
+  const [formData, setFormData] = useState({
+    name: "",
+    description: "",
+    category: "",
+    price: 0,
+    original_price: 0,
+    status: "active"
+  });
+
+  useEffect(() => {
+    fetchProduct();
+    fetchTemplates();
+  }, [productId]);
+
+  const fetchProduct = async () => {
+    try {
+      setLoading(true);
+      const response = await getProduct(String(productId));
+      if (response.success && response.data) {
+        setProduct(response.data);
+        setFormData({
+          name: response.data.name || "",
+          description: response.data.description || "",
+          category: response.data.category || "",
+          price: response.data.price || 0,
+          original_price: response.data.original_price || 0,
+          status: response.data.status || "active"
+        });
+        
+        // Initialize images
+        const images: string[] = [];
+        if (response.data.image_urls && response.data.image_urls.length > 0) {
+          images.push(...response.data.image_urls);
+        } else if (response.data.image_url) {
+          images.push(response.data.image_url);
+        }
+        setProductImages(images);
+        
+        // If product has a size chart template, load it
+        if (response.data.size_chart_template_id) {
+          setSelectedTemplateId(String(response.data.size_chart_template_id));
+          
+          // Check if product has existing size stocks
+          if (response.data.size_stocks && response.data.size_stocks.length > 0) {
+            // Use existing size stocks from API
+            setSizeStocks(response.data.size_stocks.map((item: any) => ({
+              size_label: item.size_label,
+              stock: item.stock || 0,
+              row_id: item.row_id
+            })));
+          } else {
+            // Fetch template details to initialize sizes
+            fetchTemplateDetails(response.data.size_chart_template_id);
+          }
+        } else if (response.data.size && response.data.size.length > 0) {
+          // Initialize sizes from product's existing sizes (legacy)
+          setSizeStocks(response.data.size.map((s, i) => ({
+            size_label: s,
+            stock: response.data?.stock || 0,
+            row_id: i
+          })));
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch product:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const totalRevenue = product.variations.reduce((sum, v) => sum + (v.sold * v.price), 0);
-  const avgPrice = product.variations.reduce((sum, v) => sum + v.price, 0) / product.variations.length;
+  const fetchTemplates = async () => {
+    try {
+      const response = await getSizeChartTemplates();
+      if (response.success && response.data) {
+        setTemplates(response.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch templates:', error);
+    }
+  };
+
+  const fetchTemplateDetails = async (templateId: number) => {
+    try {
+      setLoadingTemplate(true);
+      const response = await getSizeChartTemplate(templateId);
+      if (response.success && response.data && response.data.rows) {
+        // Check if product already has size stocks for this template
+        if (product && product.size_stocks && product.size_stocks.length > 0) {
+          // Map existing stocks to template rows
+          const stocks = response.data.rows.map(row => {
+            const existingStock = product.size_stocks?.find((s: any) => s.row_id === row.id);
+            return {
+              size_label: row.size_label,
+              stock: existingStock ? existingStock.stock : 0,
+              row_id: row.id
+            };
+          });
+          setSizeStocks(stocks);
+        } else {
+          // Initialize size stocks from template rows with 0 stock
+          const stocks = response.data.rows.map(row => ({
+            size_label: row.size_label,
+            stock: 0,
+            row_id: row.id
+          }));
+          setSizeStocks(stocks);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch template details:', error);
+    } finally {
+      setLoadingTemplate(false);
+    }
+  };
+
+  const handleTemplateChange = (templateId: string) => {
+    setSelectedTemplateId(templateId);
+    if (templateId) {
+      fetchTemplateDetails(parseInt(templateId));
+    } else {
+      setSizeStocks([]);
+    }
+  };
+
+  const handleStockChange = (index: number, stock: number) => {
+    setSizeStocks(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], stock };
+      return updated;
+    });
+  };
+
+  const handleSave = async () => {
+    if (!product) return;
+    
+    try {
+      setIsSaving(true);
+      
+      // Calculate total stock from all sizes
+      const totalStock = sizeStocks.reduce((sum, s) => sum + s.stock, 0);
+      
+      // Prepare update data
+      const updateData: any = {
+        ...formData,
+        stock: totalStock,
+        size: sizeStocks.map(s => s.size_label),
+        size_chart_template_id: selectedTemplateId ? parseInt(selectedTemplateId) : null,
+        image_url: productImages[0] || null,
+        image_urls: productImages
+      };
+      
+      // Add size_stocks array if template is selected
+      if (selectedTemplateId && sizeStocks.length > 0) {
+        updateData.size_stocks = sizeStocks.map(s => ({
+          row_id: s.row_id,
+          stock: s.stock
+        }));
+      }
+      
+      const response = await updateProduct(String(product.id), updateData);
+      
+      if (response.success) {
+        setProduct(prev => prev ? { ...prev, ...updateData } : null);
+        setIsEditing(false);
+      } else {
+        alert(response.error || 'Failed to update product');
+      }
+    } catch (error) {
+      console.error('Failed to save product:', error);
+      alert('Failed to save product');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const totalStock = sizeStocks.reduce((sum, s) => sum + s.stock, 0);
+  const totalSold = product?.sold || 0;
+  const totalRevenue = totalSold * (product?.price || 0);
+
+  if (loading) {
+    return (
+      <div className="p-6 flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-[#576D64]" />
+      </div>
+    );
+  }
+
+  if (!product) {
+    return (
+      <div className="p-6">
+        <Button variant="ghost" onClick={onBack} className="text-[#576D64]">
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Back to Products
+        </Button>
+        <div className="text-center py-16">
+          <p className="text-gray-500">Product not found</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -111,13 +250,20 @@ export function ProductDetail({ productId, onBack }: ProductDetailProps) {
         </Button>
         <div className="flex-1">
           <h1 className="text-2xl font-semibold text-black">{product.name}</h1>
-          <p className="text-gray-600">{product.category} • SKU: DJ-001</p>
+          <p className="text-gray-600">{product.category} • ID: {product.id}</p>
         </div>
         <Button 
-          onClick={() => setIsEditing(!isEditing)}
+          onClick={isEditing ? handleSave : () => setIsEditing(true)}
           className="bg-[#576D64] hover:bg-[#465A52]"
+          disabled={isSaving}
         >
-          {isEditing ? <Save className="w-4 h-4 mr-2" /> : <Edit className="w-4 h-4 mr-2" />}
+          {isSaving ? (
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+          ) : isEditing ? (
+            <Save className="w-4 h-4 mr-2" />
+          ) : (
+            <Edit className="w-4 h-4 mr-2" />
+          )}
           {isEditing ? 'Save Changes' : 'Edit Product'}
         </Button>
       </div>
@@ -129,7 +275,7 @@ export function ProductDetail({ productId, onBack }: ProductDetailProps) {
             <div className="flex items-center gap-2">
               <Package className="w-5 h-5 text-[#576D64]" />
               <div>
-                <div className="text-2xl font-bold text-black">{product.totalStock}</div>
+                <div className="text-2xl font-bold text-black">{totalStock}</div>
                 <div className="text-sm text-gray-600">Total Stock</div>
               </div>
             </div>
@@ -137,7 +283,7 @@ export function ProductDetail({ productId, onBack }: ProductDetailProps) {
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-2xl font-bold text-black">{product.totalSold}</div>
+            <div className="text-2xl font-bold text-black">{totalSold}</div>
             <div className="text-sm text-gray-600">Total Sold</div>
           </CardContent>
         </Card>
@@ -149,8 +295,8 @@ export function ProductDetail({ productId, onBack }: ProductDetailProps) {
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-2xl font-bold text-[#576D64]">${avgPrice.toFixed(2)}</div>
-            <div className="text-sm text-gray-600">Average Price</div>
+            <div className="text-2xl font-bold text-[#576D64]">${product.price?.toFixed(2) || '0.00'}</div>
+            <div className="text-sm text-gray-600">Current Price</div>
           </CardContent>
         </Card>
       </div>
@@ -158,316 +304,230 @@ export function ProductDetail({ productId, onBack }: ProductDetailProps) {
       <Tabs defaultValue="details" className="w-full">
         <TabsList>
           <TabsTrigger value="details">Product Details</TabsTrigger>
-          <TabsTrigger value="variations">Variations</TabsTrigger>
-          <TabsTrigger value="analytics">Analytics</TabsTrigger>
+          <TabsTrigger value="images">Images</TabsTrigger>
+          <TabsTrigger value="variations">Size & Stock</TabsTrigger>
         </TabsList>
 
         <TabsContent value="details" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Product Information</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label htmlFor="product-name">Product Name</Label>
-                  <Input 
-                    id="product-name" 
-                    value={product.name}
-                    disabled={!isEditing}
-                    className={!isEditing ? "bg-gray-50" : ""}
-                  />
+          <Card>
+            <CardHeader>
+              <CardTitle>Product Information</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="product-name">Product Name</Label>
+                    <Input 
+                      id="product-name" 
+                      value={formData.name}
+                      onChange={(e) => setFormData({...formData, name: e.target.value})}
+                      disabled={!isEditing}
+                      className={!isEditing ? "bg-gray-50" : ""}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="product-category">Category</Label>
+                      <Select 
+                        disabled={!isEditing}
+                        value={formData.category}
+                        onValueChange={(value: string) => setFormData({...formData, category: value})}
+                      >
+                        <SelectTrigger className={!isEditing ? "bg-gray-50" : ""}>
+                          <SelectValue placeholder={formData.category || "Select category"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Clothing">Clothing</SelectItem>
+                          <SelectItem value="Footwear">Footwear</SelectItem>
+                          <SelectItem value="Outerwear">Outerwear</SelectItem>
+                          <SelectItem value="Accessories">Accessories</SelectItem>
+                          <SelectItem value="T-shirts">T-shirts</SelectItem>
+                          <SelectItem value="Pants">Pants</SelectItem>
+                          <SelectItem value="Dresses">Dresses</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="product-status">Status</Label>
+                      <Select 
+                        disabled={!isEditing}
+                        value={formData.status}
+                        onValueChange={(value: string) => setFormData({...formData, status: value})}
+                      >
+                        <SelectTrigger className={!isEditing ? "bg-gray-50" : ""}>
+                          <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="active">Active</SelectItem>
+                          <SelectItem value="draft">Draft</SelectItem>
+                          <SelectItem value="archived">Archived</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="product-price">Price ($)</Label>
+                      <Input 
+                        id="product-price" 
+                        type="number"
+                        step="0.01"
+                        value={formData.price}
+                        onChange={(e) => setFormData({...formData, price: parseFloat(e.target.value) || 0})}
+                        disabled={!isEditing}
+                        className={!isEditing ? "bg-gray-50" : ""}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="product-original-price">Original Price ($)</Label>
+                      <Input 
+                        id="product-original-price" 
+                        type="number"
+                        step="0.01"
+                        value={formData.original_price}
+                        onChange={(e) => setFormData({...formData, original_price: parseFloat(e.target.value) || 0})}
+                        disabled={!isEditing}
+                        className={!isEditing ? "bg-gray-50" : ""}
+                      />
+                    </div>
+                  </div>
                 </div>
                 <div>
                   <Label htmlFor="product-description">Description</Label>
                   <Textarea 
                     id="product-description" 
-                    value={product.description}
+                    value={formData.description}
+                    onChange={(e) => setFormData({...formData, description: e.target.value})}
                     disabled={!isEditing}
-                    className={!isEditing ? "bg-gray-50" : ""}
-                    rows={4}
+                    className={`min-h-[200px] ${!isEditing ? "bg-gray-50" : ""}`}
+                    rows={8}
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="product-category">Category</Label>
-                    <Select disabled={!isEditing}>
-                      <SelectTrigger className={!isEditing ? "bg-gray-50" : ""}>
-                        <SelectValue placeholder={product.category} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="clothing">Clothing</SelectItem>
-                        <SelectItem value="footwear">Footwear</SelectItem>
-                        <SelectItem value="outerwear">Outerwear</SelectItem>
-                        <SelectItem value="accessories">Accessories</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="product-brand">Brand</Label>
-                    <Input 
-                      id="product-brand" 
-                      value={product.brand}
-                      disabled={!isEditing}
-                      className={!isEditing ? "bg-gray-50" : ""}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <Label htmlFor="product-tags">Tags</Label>
-                  <Input 
-                    id="product-tags" 
-                    value={product.tags.join(", ")}
-                    disabled={!isEditing}
-                    className={!isEditing ? "bg-gray-50" : ""}
-                    placeholder="Separate tags with commas"
-                  />
-                </div>
-              </CardContent>
-            </Card>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Product Status & Dates</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label>Status</Label>
-                  <div className="mt-2">
-                    <Badge variant={product.status === 'active' ? 'default' : 'secondary'} className="bg-green-100 text-green-800">
-                      {product.status === 'active' ? 'Active' : 'Inactive'}
-                    </Badge>
-                  </div>
+        <TabsContent value="images" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ImageIcon className="w-5 h-5" />
+                Product Images
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ImageUpload
+                images={productImages}
+                onImagesChange={setProductImages}
+                maxImages={5}
+                disabled={!isEditing}
+              />
+              {!isEditing && productImages.length === 0 && (
+                <div className="text-center py-8 text-gray-500">
+                  <ImageIcon className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                  <p>No images uploaded</p>
+                  <p className="text-sm">Click "Edit Product" to add images</p>
                 </div>
-                <div>
-                  <Label>Created Date</Label>
-                  <p className="text-gray-600 mt-1">{new Date(product.createdDate).toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'long', 
-                    day: 'numeric'
-                  })}</p>
-                </div>
-                <div>
-                  <Label>Last Updated</Label>
-                  <p className="text-gray-600 mt-1">{new Date(product.lastUpdated).toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
-                  })}</p>
-                </div>
-                <div className="pt-4 border-t">
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Total Variations:</span>
-                      <span className="font-medium text-black">{product.variations.length}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Active Variations:</span>
-                      <span className="font-medium text-black">{product.variations.filter(v => v.stock > 0).length}</span>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="variations" className="space-y-6">
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle>Product Variations</CardTitle>
-                <Dialog open={isAddVariationOpen} onOpenChange={setIsAddVariationOpen}>
-                  <DialogTrigger asChild>
-                    <Button className="bg-[#576D64] hover:bg-[#465A52]">
-                      <Plus className="w-4 h-4 mr-2" />
-                      Add Variation
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-md">
-                    <DialogHeader>
-                      <DialogTitle>Add New Variation</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label htmlFor="variation-size">Size</Label>
-                          <Select>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select size" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="xs">XS</SelectItem>
-                              <SelectItem value="s">S</SelectItem>
-                              <SelectItem value="m">M</SelectItem>
-                              <SelectItem value="l">L</SelectItem>
-                              <SelectItem value="xl">XL</SelectItem>
-                              <SelectItem value="xxl">XXL</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <Label htmlFor="variation-color">Color</Label>
-                          <Input id="variation-color" placeholder="Color name" />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label htmlFor="variation-price">Price ($)</Label>
-                          <Input id="variation-price" type="number" placeholder="0.00" />
-                        </div>
-                        <div>
-                          <Label htmlFor="variation-stock">Stock</Label>
-                          <Input id="variation-stock" type="number" placeholder="0" />
-                        </div>
-                      </div>
-                      <div>
-                        <Label htmlFor="variation-sku">SKU</Label>
-                        <Input id="variation-sku" placeholder="Auto-generated or custom" />
-                      </div>
-                      <div className="flex gap-2">
-                        <Button 
-                          className="flex-1 bg-[#576D64] hover:bg-[#465A52]"
-                          onClick={() => setIsAddVariationOpen(false)}
-                        >
-                          Add Variation
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          className="flex-1"
-                          onClick={() => setIsAddVariationOpen(false)}
-                        >
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
-                  </DialogContent>
-                </Dialog>
+                <CardTitle className="flex items-center gap-2">
+                  <Ruler className="w-5 h-5" />
+                  Size Chart & Stock Management
+                </CardTitle>
               </div>
             </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Image</TableHead>
-                    <TableHead>SKU</TableHead>
-                    <TableHead>Size</TableHead>
-                    <TableHead>Color</TableHead>
-                    <TableHead>Price</TableHead>
-                    <TableHead>Stock</TableHead>
-                    <TableHead>Sold</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {product.variations.map((variation) => {
-                    const stockStatus = getStockStatus(variation.stock);
-                    return (
-                      <TableRow key={variation.id}>
-                        <TableCell>
-                          <ImageWithFallback
-                            src={variation.image}
-                            alt={`${product.name} - ${variation.color} ${variation.size}`}
-                            className="w-12 h-12 rounded-lg object-cover"
-                          />
-                        </TableCell>
-                        <TableCell className="font-mono text-sm">{variation.sku}</TableCell>
-                        <TableCell>{variation.size}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <div 
-                              className="w-4 h-4 rounded-full border border-gray-300"
-                              style={{ backgroundColor: variation.colorHex }}
-                            ></div>
-                            {variation.color}
-                          </div>
-                        </TableCell>
-                        <TableCell className="font-medium">${variation.price}</TableCell>
-                        <TableCell>{variation.stock}</TableCell>
-                        <TableCell className="text-gray-600">{variation.sold}</TableCell>
-                        <TableCell>
-                          <Badge variant={stockStatus.variant}>
-                            {stockStatus.label}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Button variant="ghost" size="sm">
-                              <Edit className="w-4 h-4" />
-                            </Button>
-                            <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700">
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
+            <CardContent className="space-y-6">
+              {/* Size Chart Template Selector */}
+              <div className="max-w-md">
+                <Label htmlFor="size-template" className="text-base font-semibold">Select Size Chart Template</Label>
+                <p className="text-sm text-gray-500 mb-2">Choose a template to auto-populate available sizes</p>
+                <Select 
+                  value={selectedTemplateId}
+                  onValueChange={handleTemplateChange}
+                  disabled={!isEditing}
+                >
+                  <SelectTrigger className={!isEditing ? "bg-gray-50" : ""}>
+                    <SelectValue placeholder="Select a size chart template" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">No Template (Custom Sizes)</SelectItem>
+                    {templates.map(template => (
+                      <SelectItem key={template.id} value={String(template.id)}>
+                        {template.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Size and Stock Table */}
+              {loadingTemplate ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-[#576D64]" />
+                </div>
+              ) : sizeStocks.length > 0 ? (
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-gray-50">
+                        <TableHead className="font-semibold text-black w-1/2">Size</TableHead>
+                        <TableHead className="font-semibold text-black w-1/2">Stock Quantity</TableHead>
                       </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {sizeStocks.map((item, index) => (
+                        <TableRow key={item.row_id}>
+                          <TableCell className="font-medium text-lg">
+                            <Badge variant="outline" className="text-base px-4 py-1">
+                              {item.size_label}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              min="0"
+                              value={item.stock}
+                              onChange={(e) => handleStockChange(index, parseInt(e.target.value) || 0)}
+                              disabled={!isEditing}
+                              className={`w-32 text-center ${!isEditing ? "bg-gray-50" : ""}`}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  
+                  {/* Total Stock Summary */}
+                  <div className="bg-[#576D64]/10 px-4 py-3 border-t">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-[#576D64]">Total Stock:</span>
+                      <span className="text-xl font-bold text-[#576D64]">{totalStock} units</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-12 border rounded-lg bg-gray-50">
+                  <Ruler className="w-12 h-12 mx-auto text-gray-300 mb-4" />
+                  <p className="text-gray-500 mb-2">No sizes configured</p>
+                  <p className="text-sm text-gray-400">
+                    {isEditing 
+                      ? "Select a size chart template above to configure sizes and stock"
+                      : "Click 'Edit Product' and select a size chart template to add sizes"
+                    }
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
-        </TabsContent>
-
-        <TabsContent value="analytics" className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Sales Performance</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Total Units Sold</span>
-                    <span className="font-bold text-black">{product.totalSold}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Revenue Generated</span>
-                    <span className="font-bold text-green-600">${totalRevenue.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Average Selling Price</span>
-                    <span className="font-bold text-black">${avgPrice.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Conversion Rate</span>
-                    <span className="font-bold text-[#576D64]">12.5%</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Stock Analysis</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Current Stock Level</span>
-                    <span className="font-bold text-black">{product.totalStock}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Low Stock Variations</span>
-                    <span className="font-bold text-yellow-600">
-                      {product.variations.filter(v => v.stock < 10 && v.stock > 0).length}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Out of Stock</span>
-                    <span className="font-bold text-red-600">
-                      {product.variations.filter(v => v.stock === 0).length}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Stock Turnover</span>
-                    <span className="font-bold text-[#576D64]">5.2x</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
         </TabsContent>
       </Tabs>
     </div>

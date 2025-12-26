@@ -14,7 +14,7 @@ import { getProducts, createProduct, deleteProduct } from "@/lib/api";
 import type { Product } from "@/lib/api";
 
 interface ProductsManagementProps {
-  onViewProduct?: (productId: number) => void;
+  onViewProduct?: (productId: string) => void;
 }
 
 export function ProductsManagement({ onViewProduct }: ProductsManagementProps) {
@@ -190,7 +190,7 @@ export function ProductsManagement({ onViewProduct }: ProductsManagementProps) {
                 <Label htmlFor="product-category">Category *</Label>
                 <Select 
                   value={newProduct.category}
-                  onValueChange={(value) => setNewProduct({...newProduct, category: value})}
+                  onValueChange={(value: string) => setNewProduct({...newProduct, category: value})}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select category" />
@@ -368,7 +368,7 @@ export function ProductsManagement({ onViewProduct }: ProductsManagementProps) {
                           <Button 
                             variant="ghost" 
                             size="sm"
-                            onClick={() => onViewProduct?.(parseInt(product.id))}
+                            onClick={() => onViewProduct?.(product.id)}
                           >
                             <Eye className="w-4 h-4" />
                           </Button>

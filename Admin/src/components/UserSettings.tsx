@@ -4,27 +4,11 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
-import { Switch } from "./ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Separator } from "./ui/separator";
-import { User, Shield, Bell, Palette, Camera, Key, History } from "lucide-react";
+import { User, Shield, Camera, Key, History, Monitor } from "lucide-react";
 
 export function UserSettings() {
-  const [notifications, setNotifications] = useState({
-    orderUpdates: true,
-    stockAlerts: true,
-    customerMessages: false,
-    systemUpdates: true,
-    emailNotifications: true,
-    pushNotifications: false
-  });
-
-  const [accessibility, setAccessibility] = useState({
-    darkMode: false,
-    fontSize: "medium",
-    reducedMotion: false
-  });
-
   const loginHistory = [
     { date: "2024-09-23", time: "10:30 AM", device: "Chrome on Windows", location: "New York, NY" },
     { date: "2024-09-22", time: "09:15 AM", device: "Chrome on Windows", location: "New York, NY" },
@@ -40,10 +24,8 @@ export function UserSettings() {
       </div>
 
       <Tabs defaultValue="profile" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-2 max-w-md">
           <TabsTrigger value="profile">Profile</TabsTrigger>
-          <TabsTrigger value="notifications">Notifications</TabsTrigger>
-          <TabsTrigger value="accessibility">Accessibility</TabsTrigger>
           <TabsTrigger value="security">Security</TabsTrigger>
         </TabsList>
 
@@ -99,10 +81,33 @@ export function UserSettings() {
                 </div>
               </div>
 
-              <Separator />
+              <div className="flex gap-3">
+                <Button className="bg-[#576D64] hover:bg-[#465A52]">
+                  Save Changes
+                </Button>
+                <Button variant="outline">
+                  Cancel
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
+        <TabsContent value="security" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="w-5 h-5" />
+                Security Settings
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Change Password Section */}
               <div className="space-y-4">
-                <h4 className="font-medium text-black">Change Password</h4>
+                <h4 className="font-medium text-black flex items-center gap-2">
+                  <Key className="w-4 h-4 text-[#576D64]" />
+                  Change Password
+                </h4>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="current-password">Current Password</Label>
@@ -117,206 +122,14 @@ export function UserSettings() {
                     <Input id="confirm-password" type="password" />
                   </div>
                 </div>
-              </div>
-
-              <div className="flex gap-3">
                 <Button className="bg-[#576D64] hover:bg-[#465A52]">
-                  Save Changes
+                  Update Password
                 </Button>
-                <Button variant="outline">
-                  Cancel
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="notifications" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Bell className="w-5 h-5" />
-                Notification Preferences
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-4">
-                <h4 className="font-medium text-black">System Notifications</h4>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label className="text-base">Order Updates</Label>
-                      <p className="text-sm text-gray-600">Get notified when orders are placed or updated</p>
-                    </div>
-                    <Switch
-                      checked={notifications.orderUpdates}
-                      onCheckedChange={(checked) =>
-                        setNotifications({ ...notifications, orderUpdates: checked })
-                      }
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label className="text-base">Stock Alerts</Label>
-                      <p className="text-sm text-gray-600">Low stock and out of stock notifications</p>
-                    </div>
-                    <Switch
-                      checked={notifications.stockAlerts}
-                      onCheckedChange={(checked) =>
-                        setNotifications({ ...notifications, stockAlerts: checked })
-                      }
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label className="text-base">Customer Messages</Label>
-                      <p className="text-sm text-gray-600">Support requests and customer inquiries</p>
-                    </div>
-                    <Switch
-                      checked={notifications.customerMessages}
-                      onCheckedChange={(checked) =>
-                        setNotifications({ ...notifications, customerMessages: checked })
-                      }
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label className="text-base">System Updates</Label>
-                      <p className="text-sm text-gray-600">Platform updates and maintenance notices</p>
-                    </div>
-                    <Switch
-                      checked={notifications.systemUpdates}
-                      onCheckedChange={(checked) =>
-                        setNotifications({ ...notifications, systemUpdates: checked })
-                      }
-                    />
-                  </div>
-                </div>
               </div>
 
               <Separator />
 
-              <div className="space-y-4">
-                <h4 className="font-medium text-black">Delivery Methods</h4>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label className="text-base">Email Notifications</Label>
-                      <p className="text-sm text-gray-600">Receive notifications via email</p>
-                    </div>
-                    <Switch
-                      checked={notifications.emailNotifications}
-                      onCheckedChange={(checked) =>
-                        setNotifications({ ...notifications, emailNotifications: checked })
-                      }
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label className="text-base">Push Notifications</Label>
-                      <p className="text-sm text-gray-600">Browser push notifications</p>
-                    </div>
-                    <Switch
-                      checked={notifications.pushNotifications}
-                      onCheckedChange={(checked) =>
-                        setNotifications({ ...notifications, pushNotifications: checked })
-                      }
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <Button className="bg-[#576D64] hover:bg-[#465A52]">
-                Save Notification Settings
-              </Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="accessibility" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Palette className="w-5 h-5" />
-                Accessibility Settings
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="text-base">Dark Mode</Label>
-                    <p className="text-sm text-gray-600">Switch to dark theme</p>
-                  </div>
-                  <Switch
-                    checked={accessibility.darkMode}
-                    onCheckedChange={(checked) =>
-                      setAccessibility({ ...accessibility, darkMode: checked })
-                    }
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="text-base">Reduced Motion</Label>
-                    <p className="text-sm text-gray-600">Minimize animations and transitions</p>
-                  </div>
-                  <Switch
-                    checked={accessibility.reducedMotion}
-                    onCheckedChange={(checked) =>
-                      setAccessibility({ ...accessibility, reducedMotion: checked })
-                    }
-                  />
-                </div>
-              </div>
-
-              <Separator />
-
-              <div className="space-y-4">
-                <div>
-                  <Label className="text-base">Font Size</Label>
-                  <p className="text-sm text-gray-600 mb-3">Adjust text size for better readability</p>
-                  <div className="flex gap-2">
-                    <Button 
-                      variant={accessibility.fontSize === "small" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setAccessibility({ ...accessibility, fontSize: "small" })}
-                    >
-                      Small
-                    </Button>
-                    <Button 
-                      variant={accessibility.fontSize === "medium" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setAccessibility({ ...accessibility, fontSize: "medium" })}
-                    >
-                      Medium
-                    </Button>
-                    <Button 
-                      variant={accessibility.fontSize === "large" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setAccessibility({ ...accessibility, fontSize: "large" })}
-                    >
-                      Large
-                    </Button>
-                  </div>
-                </div>
-              </div>
-
-              <Button className="bg-[#576D64] hover:bg-[#465A52]">
-                Save Accessibility Settings
-              </Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="security" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Shield className="w-5 h-5" />
-                Security Settings
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
+              {/* Two-Factor Authentication */}
               <div className="space-y-4">
                 <div className="flex items-center justify-between p-4 border rounded-lg">
                   <div className="flex items-center gap-3">
@@ -334,6 +147,7 @@ export function UserSettings() {
 
               <Separator />
 
+              {/* Login History */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
                   <History className="w-5 h-5 text-[#576D64]" />
@@ -341,13 +155,18 @@ export function UserSettings() {
                 </div>
                 <div className="space-y-3">
                   {loginHistory.map((login, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div>
-                        <p className="font-medium text-black">{login.device}</p>
-                        <p className="text-sm text-gray-600">{login.location}</p>
+                    <div key={index} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors">
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-full bg-[#576D64]/10 flex items-center justify-center">
+                          <Monitor className="w-5 h-5 text-[#576D64]" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-black">{login.device}</p>
+                          <p className="text-sm text-gray-600">{login.location}</p>
+                        </div>
                       </div>
                       <div className="text-right">
-                        <p className="text-sm text-black">{login.date}</p>
+                        <p className="text-sm font-medium text-black">{login.date}</p>
                         <p className="text-sm text-gray-600">{login.time}</p>
                       </div>
                     </div>

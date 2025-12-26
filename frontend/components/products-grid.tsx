@@ -13,65 +13,94 @@ export function ProductsGrid() {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [currentPage, setCurrentPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(1)
-  const [total, setTotal] = useState(0)
   const [sortBy, setSortBy] = useState("newest")
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalProducts, setTotalProducts] = useState(0)
+
+  const limit = 9 // Products per page
 
   useEffect(() => {
+    async function fetchProducts() {
+      try {
+        setLoading(true)
+        // Map frontend sort values to backend sort values
+        const sortMap: Record<string, string> = {
+          "price-high": "price_high_low",
+          "price-low": "price_low_high",
+          "newest": "newest",
+          "popular": "best_selling"
+        }
+        
+        const response = await getProducts({
+          page: currentPage,
+          limit: limit,
+          sort: sortMap[sortBy] || "newest"
+        })
+        
+        if (response.success && response.data) {
+          setProducts(response.data)
+          if (response.pagination) {
+            setTotalPages(response.pagination.total_pages || 1)
+            setTotalProducts(response.pagination.total || 0)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch products:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    
     fetchProducts()
   }, [currentPage, sortBy])
 
-  const fetchProducts = async () => {
-    try {
-      setLoading(true)
-      const response = await getProducts({
-        page: currentPage,
-        limit: 9,
-        sort: sortBy
-      })
-
-      if (response.success && response.data) {
-        setProducts(response.data)
-        if (response.pagination) {
-          setTotalPages(response.pagination.total_pages)
-          setTotal(response.pagination.total)
-        }
-      }
-    } catch (error) {
-      console.error('Failed to fetch products:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const formatProductForCard = (product: any) => ({
+  const formatProductForCard = (product: Product) => ({
     id: product.id,
     name: product.name,
     price: product.price,
     originalPrice: product.original_price || null,
-    // API returns 'image' as array for filter endpoint
-    image: Array.isArray(product.image) ? product.image[0] : (product.image_urls?.[0] || product.image_url || "/placeholder.svg"),
-    rating: product.rating || 4.0,
+    image: product.image_urls?.[0] || product.image_url || product.image?.[0] || "/placeholder.svg",
+    rating: product.rating || 4.5,
   })
 
+  // Generate visible page numbers
   const getVisiblePages = () => {
     const pages: (number | string)[] = []
-    if (totalPages <= 7) {
-      for (let i = 1; i <= totalPages; i++) pages.push(i)
-    } else {
-      if (currentPage <= 3) {
-        pages.push(1, 2, 3, "...", totalPages - 1, totalPages)
-      } else if (currentPage >= totalPages - 2) {
-        pages.push(1, 2, "...", totalPages - 2, totalPages - 1, totalPages)
-      } else {
-        pages.push(1, "...", currentPage - 1, currentPage, currentPage + 1, "...", totalPages)
+    const maxVisible = 7
+    
+    if (totalPages <= maxVisible) {
+      // Show all pages if total is less than max visible
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i)
       }
+    } else {
+      // Show first page
+      pages.push(1)
+      
+      if (currentPage > 3) {
+        pages.push("...")
+      }
+      
+      // Show pages around current page
+      const start = Math.max(2, currentPage - 1)
+      const end = Math.min(totalPages - 1, currentPage + 1)
+      
+      for (let i = start; i <= end; i++) {
+        pages.push(i)
+      }
+      
+      if (currentPage < totalPages - 2) {
+        pages.push("...")
+      }
+      
+      // Show last page
+      pages.push(totalPages)
     }
+    
     return pages
   }
 
-  const startItem = (currentPage - 1) * 9 + 1
-  const endItem = Math.min(currentPage * 9, total)
+  const visiblePages = getVisiblePages()
 
   return (
     <div className="flex-1">
@@ -79,22 +108,23 @@ export function ProductsGrid() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold">All Products</h1>
         <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">
-            {loading ? "Loading..." : `Showing ${startItem.toString().padStart(2, '0')}-${endItem.toString().padStart(2, '0')} of ${total} Products`}
-          </span>
+          {loading ? (
+            <span className="text-sm text-muted-foreground">Loading...</span>
+          ) : (
+            <span className="text-sm text-muted-foreground">
+              Showing {((currentPage - 1) * limit) + 1}-{Math.min(currentPage * limit, totalProducts)} of {totalProducts} Products
+            </span>
+          )}
           <span className="text-sm text-muted-foreground">Sort by:</span>
-          <Select value={sortBy} onValueChange={(value) => {
-            setSortBy(value)
-            setCurrentPage(1)
-          }}>
+          <Select value={sortBy} onValueChange={setSortBy}>
             <SelectTrigger className="w-[180px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="price_high_low">Price (High to Low)</SelectItem>
-              <SelectItem value="price_low_high">Price (Low to High)</SelectItem>
+              <SelectItem value="price-high">Price (High to Low)</SelectItem>
+              <SelectItem value="price-low">Price (Low to High)</SelectItem>
               <SelectItem value="newest">Newest</SelectItem>
-              <SelectItem value="rating_high_low">Most Popular</SelectItem>
+              <SelectItem value="popular">Most Popular</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -113,15 +143,15 @@ export function ProductsGrid() {
         </div>
       ) : products.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-          {products.map((product) => (
-            <Link key={product.id} href={`/product/${product.id}`}>
+          {products.map((product, index) => (
+            <Link key={product.id || `product-${index}`} href={`/product/${product.id}`}>
               <ProductCard product={formatProductForCard(product)} />
             </Link>
           ))}
         </div>
       ) : (
         <div className="text-center py-16 text-muted-foreground">
-          No products found
+          <p>No products found</p>
         </div>
       )}
 
@@ -137,7 +167,7 @@ export function ProductsGrid() {
             <ChevronLeft className="w-4 h-4" />
           </Button>
 
-          {getVisiblePages().map((page, index) => (
+          {visiblePages.map((page, index) => (
             <Button
               key={index}
               variant={currentPage === page ? "default" : "ghost"}

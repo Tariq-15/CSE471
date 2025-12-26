@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card"
 
 interface ProductCardProps {
   product: {
-    id: number
+    id: string | number
     name: string
     price: number
     image: string

@@ -38,7 +38,8 @@ export function ProductReviews({ productId }: ProductReviewsProps) {
     setVisibleCount((prev) => Math.min(prev + 6, reviews.length))
   }
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return 'Unknown date'
     try {
       return new Date(dateString).toLocaleDateString('en-US', {
         month: 'long',
@@ -123,7 +124,9 @@ export function ProductReviews({ productId }: ProductReviewsProps) {
             </div>
 
             {/* Review text */}
-            <p className="text-muted-foreground leading-relaxed">"{review.comment}"</p>
+            {review.comment && (
+              <p className="text-muted-foreground leading-relaxed">"{review.comment}"</p>
+            )}
 
             {/* Date */}
             <p className="text-sm text-muted-foreground">Posted on {formatDate(review.posted_date)}</p>

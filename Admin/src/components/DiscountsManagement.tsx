@@ -8,13 +8,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Plus, Search, Edit, Trash2, Copy, Percent, Loader2 } from "lucide-react";
-import { getDiscounts, createDiscount, deleteDiscount, getDiscountStats } from "@/lib/api";
+import { getDiscounts, createDiscount, updateDiscount, deleteDiscount, getDiscountStats } from "@/lib/api";
 import type { Discount } from "@/lib/api";
 
 export function DiscountsManagement() {
   const [discounts, setDiscounts] = useState<Discount[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -36,6 +37,19 @@ export function DiscountsManagement() {
     usage_limit: '',
     min_order_value: ''
   });
+
+  // Edit discount state
+  const [editDiscount, setEditDiscount] = useState<Discount | null>(null);
+  const [editForm, setEditForm] = useState({
+    code: '',
+    discount: '',
+    type: 'percentage',
+    expiration_date: '',
+    usage_limit: '',
+    min_order_value: '',
+    status: 'active'
+  });
+
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -119,6 +133,56 @@ export function DiscountsManagement() {
     } catch (err) {
       console.error('Create discount error:', err);
       alert('Failed to create discount');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleOpenEdit = (discount: Discount) => {
+    setEditDiscount(discount);
+    setEditForm({
+      code: discount.code,
+      discount: String(discount.discount),
+      type: discount.type,
+      expiration_date: discount.expiration_date?.split('T')[0] || '',
+      usage_limit: String(discount.usage_limit),
+      min_order_value: String(discount.min_order_value || 0),
+      status: discount.status
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  const handleUpdateDiscount = async () => {
+    if (!editDiscount || !editForm.code || !editForm.discount || !editForm.expiration_date) {
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      
+      const updateData = {
+        code: editForm.code.toUpperCase(),
+        discount: parseFloat(editForm.discount),
+        type: editForm.type as 'percentage' | 'fixed',
+        expiration_date: editForm.expiration_date,
+        usage_limit: parseInt(editForm.usage_limit) || 100,
+        min_order_value: parseFloat(editForm.min_order_value) || 0,
+        status: editForm.status
+      };
+
+      const response = await updateDiscount(editDiscount.id, updateData);
+
+      if (response.success) {
+        setIsEditDialogOpen(false);
+        setEditDiscount(null);
+        fetchDiscounts();
+        fetchStats();
+      } else {
+        alert(response.error || 'Failed to update discount');
+      }
+    } catch (err) {
+      console.error('Update discount error:', err);
+      alert('Failed to update discount');
     } finally {
       setIsSubmitting(false);
     }
@@ -208,7 +272,7 @@ export function DiscountsManagement() {
                   <Label htmlFor="discount-type">Discount Type</Label>
                   <Select 
                     value={newDiscount.type}
-                    onValueChange={(value) => setNewDiscount({...newDiscount, type: value})}
+                    onValueChange={(value: string) => setNewDiscount({...newDiscount, type: value})}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select type" />
@@ -284,6 +348,121 @@ export function DiscountsManagement() {
           </DialogContent>
         </Dialog>
       </div>
+
+      {/* Edit Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Discount</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="edit-discount-code">Discount Code *</Label>
+              <Input 
+                id="edit-discount-code" 
+                placeholder="e.g., SAVE20"
+                value={editForm.code}
+                onChange={(e) => setEditForm({...editForm, code: e.target.value.toUpperCase()})}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit-discount-type">Discount Type</Label>
+                <Select 
+                  value={editForm.type}
+                  onValueChange={(value: string) => setEditForm({...editForm, type: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="percentage">Percentage</SelectItem>
+                    <SelectItem value="fixed">Fixed Amount</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="edit-discount-value">Value *</Label>
+                <Input 
+                  id="edit-discount-value" 
+                  type="number" 
+                  placeholder="20"
+                  value={editForm.discount}
+                  onChange={(e) => setEditForm({...editForm, discount: e.target.value})}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit-expiration-date">Expiration Date *</Label>
+                <Input 
+                  id="edit-expiration-date" 
+                  type="date"
+                  value={editForm.expiration_date}
+                  onChange={(e) => setEditForm({...editForm, expiration_date: e.target.value})}
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-status">Status</Label>
+                <Select 
+                  value={editForm.status}
+                  onValueChange={(value: string) => setEditForm({...editForm, status: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="paused">Paused</SelectItem>
+                    <SelectItem value="expired">Expired</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit-usage-limit">Usage Limit</Label>
+                <Input 
+                  id="edit-usage-limit" 
+                  type="number" 
+                  placeholder="100"
+                  value={editForm.usage_limit}
+                  onChange={(e) => setEditForm({...editForm, usage_limit: e.target.value})}
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-min-order">Min Order Value ($)</Label>
+                <Input 
+                  id="edit-min-order" 
+                  type="number" 
+                  placeholder="50"
+                  value={editForm.min_order_value}
+                  onChange={(e) => setEditForm({...editForm, min_order_value: e.target.value})}
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button 
+                className="flex-1 bg-[#576D64] hover:bg-[#465A52]"
+                onClick={handleUpdateDiscount}
+                disabled={isSubmitting || !editForm.code || !editForm.discount || !editForm.expiration_date}
+              >
+                {isSubmitting ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                ) : null}
+                Update Discount
+              </Button>
+              <Button 
+                variant="outline" 
+                className="flex-1"
+                onClick={() => setIsEditDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {error && (
         <Card className="border-red-200 bg-red-50">
@@ -404,7 +583,11 @@ export function DiscountsManagement() {
                       <TableCell>{getStatusBadge(discount.status, discount.expiration_date)}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <Button variant="ghost" size="sm">
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => handleOpenEdit(discount)}
+                          >
                             <Edit className="w-4 h-4" />
                           </Button>
                           <Button 

@@ -8,21 +8,17 @@ import { OrdersManagement } from "./components/OrdersManagement";
 import { OrderDetail } from "./components/OrderDetail";
 import { CustomersManagement } from "./components/CustomersManagement";
 import { CustomerDetail } from "./components/CustomerDetail";
-import { SuppliersManagement } from "./components/SuppliersManagement";
-import { SupplierDetail } from "./components/SupplierDetail";
-import { Analytics } from "./components/Analytics";
-import { StockManagement } from "./components/StockManagement";
-import { DiscountsManagement } from "./components/DiscountsManagement";
 import { SizeChartManagement } from "./components/SizeChartManagement";
+import { Analytics } from "./components/Analytics";
+import { DiscountsManagement } from "./components/DiscountsManagement";
 import { UserSettings } from "./components/UserSettings";
 
 export default function App() {
   const [activeSection, setActiveSection] = useState("dashboard");
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
-  const [selectedSupplierId, setSelectedSupplierId] = useState<number | null>(null);
 
   const renderSection = () => {
     switch (activeSection) {
@@ -43,17 +39,10 @@ export default function App() {
           return <CustomerDetail customerId={selectedCustomerId} onBack={() => setSelectedCustomerId(null)} />;
         }
         return <CustomersManagement onViewCustomer={setSelectedCustomerId} />;
-      case "suppliers":
-        if (selectedSupplierId) {
-          return <SupplierDetail supplierId={selectedSupplierId} onBack={() => setSelectedSupplierId(null)} />;
-        }
-        return <SuppliersManagement onViewSupplier={setSelectedSupplierId} />;
-      case "analytics":
-        return <Analytics />;
-      case "stock":
-        return <StockManagement />;
       case "sizecharts":
         return <SizeChartManagement />;
+      case "analytics":
+        return <Analytics />;
       case "discounts":
         return <DiscountsManagement />;
       case "settings":

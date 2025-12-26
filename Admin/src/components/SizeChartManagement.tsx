@@ -277,7 +277,7 @@ export function SizeChartManagement() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 w-full max-w-none">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-semibold text-black">Size Chart Management</h2>
@@ -341,7 +341,7 @@ export function SizeChartManagement() {
       )}
 
       {/* Templates List */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {templates.map((template) => (
           <Card key={template.id} className="hover:shadow-md transition-shadow">
             <CardHeader className="pb-2">
@@ -405,7 +405,7 @@ export function SizeChartManagement() {
 
       {/* Edit Template Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-6xl w-[90vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Grid3X3 className="w-5 h-5" />
@@ -443,7 +443,7 @@ export function SizeChartManagement() {
                     <CardTitle className="text-sm">Add Measurement (Column)</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-2">
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 w-full">
                       <Input
                         value={newColumnName}
                         onChange={(e) => {
@@ -451,7 +451,7 @@ export function SizeChartManagement() {
                           setNewColumnKey(e.target.value.toLowerCase().replace(/\s+/g, '_'));
                         }}
                         placeholder="Display Name (e.g., Chest)"
-                        className="flex-1"
+                        className="w-200"
                       />
                       <Input
                         value={newColumnUnit}

@@ -14,7 +14,7 @@ export function NewArrivals() {
   useEffect(() => {
     async function fetchProducts() {
       try {
-        const response = await getNewArrivals(4)
+        const response = await getNewArrivals()
         if (response.success && response.data) {
           setProducts(response.data)
         }
@@ -51,8 +51,8 @@ export function NewArrivals() {
               </div>
             ))
           ) : products.length > 0 ? (
-            products.map((product) => (
-              <Link key={product.id} href={`/product/${product.id}`}>
+            products.map((product, index) => (
+              <Link key={product.id || `product-${index}`} href={`/product/${product.id}`}>
                 <ProductCard product={formatProductForCard(product)} />
               </Link>
             ))

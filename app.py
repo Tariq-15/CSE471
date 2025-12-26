@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from supabase import create_client, Client
 import os
@@ -7,8 +7,10 @@ import uuid
 from datetime import datetime
 from google import genai
 import json
-from google import genai
-import json
+from io import BytesIO
+from PIL import Image
+import base64
+import requests
 
 load_dotenv()
 
@@ -59,8 +61,9 @@ def get_products_filtered():
         # Calculate offset
         offset = (page - 1) * limit
         
-        # Build query
+        # Build query - only show active products for users
         query = supabase.table('products').select('id, name, price, image_urls, color, category, tags', count='exact')
+        query = query.eq('status', 'active')  # Only show active products
         
         # Apply filters
         if category:
@@ -76,6 +79,7 @@ def get_products_filtered():
         
         # Get total count (without color filter for now, will filter in Python)
         count_query = supabase.table('products').select('id', count='exact')
+        count_query = count_query.eq('status', 'active')  # Only count active products
         if category:
             count_query = count_query.eq('category', category)
         if min_price is not None:
@@ -254,7 +258,7 @@ def get_product(product_id):
     Returns: Product information including name, description, price, images
     """
     try:
-        response = supabase.table('products').select('*').eq('id', product_id).execute()
+        response = supabase.table('products').select('*').eq('id', product_id).eq('status', 'active').execute()
         
         if response.data and len(response.data) > 0:
             return jsonify({
@@ -362,6 +366,7 @@ def get_related_products(product_id):
             response = supabase.table('products')\
                 .select('id, name, description, price, original_price, image_url, image_urls, category')\
                 .eq('category', category)\
+                .eq('status', 'active')\
                 .neq('id', product_id)\
                 .limit(limit)\
                 .execute()
@@ -1090,8 +1095,8 @@ def get_new_arrivals():
     try:
         import random
         
-        # Get all products with "New Arrival" tag
-        response = supabase.table('products').select('id, name, price, image_urls, color, tags').execute()
+        # Get all active products with "New Arrival" tag
+        response = supabase.table('products').select('id, name, price, image_urls, color, tags').eq('status', 'active').execute()
         
         # Filter products with "New Arrival" tag
         new_arrival_products = []
@@ -1164,8 +1169,8 @@ def get_featured_products():
     try:
         import random
         
-        # Get all products with "Featured Product" tag
-        response = supabase.table('products').select('id, name, price, image_urls, color, tags').execute()
+        # Get all active products with "Featured Product" tag
+        response = supabase.table('products').select('id, name, price, image_urls, color, tags').eq('status', 'active').execute()
         
         # Filter products with "Featured Product" tag
         featured_products = []
@@ -1255,8 +1260,9 @@ def get_all_products():
         # Calculate offset
         offset = (page - 1) * limit
         
-        # Build query
+        # Build query - only show active products for users
         query = supabase.table('products').select('id, name, price, image_urls, category, color, tags', count='exact')
+        query = query.eq('status', 'active')  # Only show active products
         
         # Apply filters (tag filter will be applied in Python)
         if category:
@@ -1272,6 +1278,7 @@ def get_all_products():
         
         # Get total count with filters (tag filter will be recalculated)
         count_query = supabase.table('products').select('id', count='exact')
+        count_query = count_query.eq('status', 'active')  # Only count active products
         if category:
             count_query = count_query.eq('category', category)
         if min_price is not None:
@@ -1320,6 +1327,7 @@ def get_all_products():
                 images = [single_image] if single_image else []
             
             products_list.append({
+                'id': product.get('id'),  # Include product ID
                 'name': product.get('name', ''),
                 'rating': average_rating,
                 'image': images,  # Array of max 2 images
@@ -1851,9 +1859,10 @@ def search_products():
                 "data": []
             }), 200
         
-        # Search products by name (case-insensitive)
+        # Search products by name (case-insensitive) - only active products
         response = supabase.table('products')\
             .select('id, name, price, image_urls, image_url, category')\
+            .eq('status', 'active')\
             .ilike('name', f'%{query}%')\
             .limit(limit)\
             .execute()
@@ -2080,95 +2089,608 @@ def test():
         return jsonify({"response": f"Hi {name}"})
 
 # ============================================
+# ADMIN PRODUCTS APIs
+# ============================================
+
+@app.route('/api/admin/products', methods=['GET', 'POST'])
+def admin_products():
+    """Get all products or create a new product"""
+    try:
+        if request.method == 'GET':
+            page = request.args.get('page', 1, type=int)
+            limit = request.args.get('limit', 20, type=int)
+            search = request.args.get('search', '')
+            category = request.args.get('category', '')
+            offset = (page - 1) * limit
+            
+            query = supabase.table('products').select('*', count='exact')
+            
+            if search:
+                query = query.ilike('name', f'%{search}%')
+            if category:
+                query = query.eq('category', category)
+            
+            response = query.order('created_at', desc=True).range(offset, offset + limit - 1).execute()
+            
+            return jsonify({
+                "success": True,
+                "data": response.data or [],
+                "pagination": {
+                    "page": page,
+                    "limit": limit,
+                    "total": response.count or 0,
+                    "total_pages": ((response.count or 0) + limit - 1) // limit
+                }
+            }), 200
+        
+        elif request.method == 'POST':
+            data = request.json
+            product_data = {
+                'name': data.get('name'),
+                'description': data.get('description', ''),
+                'category': data.get('category'),
+                'price': data.get('price'),
+                'original_price': data.get('original_price'),
+                'image_url': data.get('image_url'),
+                'image_urls': data.get('image_urls', []),
+                'color': data.get('color', []),
+                'size': data.get('size', []),
+                'tags': data.get('tags', []),
+                'stock': data.get('stock', 0),
+                'status': data.get('status', 'active')
+            }
+            response = supabase.table('products').insert(product_data).execute()
+            return jsonify({
+                "success": True,
+                "data": response.data[0] if response.data else None,
+                "message": "Product created successfully"
+            }), 201
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/admin/products/<product_id>', methods=['GET', 'PUT', 'DELETE'])
+def admin_product_detail(product_id):
+    """Get, update or delete a product"""
+    try:
+        if request.method == 'GET':
+            response = supabase.table('products').select('*').eq('id', product_id).execute()
+            if not response.data:
+                return jsonify({"success": False, "message": "Product not found"}), 404
+            
+            product_data = response.data[0]
+            
+            # Fetch product size stock if product has size_chart_template_id
+            if product_data.get('size_chart_template_id'):
+                try:
+                    # Get product_sizes with stock
+                    product_sizes = supabase.table('product_sizes')\
+                        .select('id, size_chart_row_id, size_chart_rows(size_label), product_size_stock(stock_quantity)')\
+                        .eq('product_id', product_id)\
+                        .execute()
+                    
+                    # Format size stock data
+                    size_stocks = []
+                    if product_sizes.data:
+                        for ps in product_sizes.data:
+                            row = ps.get('size_chart_rows')
+                            stock_data = ps.get('product_size_stock')
+                            
+                            # Handle nested structure (could be dict or list)
+                            if isinstance(row, list) and len(row) > 0:
+                                row = row[0]
+                            elif isinstance(row, dict):
+                                pass  # Already a dict
+                            else:
+                                continue
+                            
+                            if row:
+                                # Get stock value (column is stock_quantity, not stock)
+                                stock_value = 0
+                                if stock_data:
+                                    if isinstance(stock_data, list) and len(stock_data) > 0:
+                                        stock_value = stock_data[0].get('stock_quantity', 0)
+                                    elif isinstance(stock_data, dict):
+                                        stock_value = stock_data.get('stock_quantity', 0)
+                                
+                                size_stocks.append({
+                                    'row_id': ps['size_chart_row_id'],
+                                    'size_label': row.get('size_label', '') if isinstance(row, dict) else '',
+                                    'stock': stock_value
+                                })
+                    
+                    product_data['size_stocks'] = size_stocks
+                except Exception as e:
+                    print(f"Warning: Could not fetch size stocks: {e}")
+                    product_data['size_stocks'] = []
+            
+            return jsonify({"success": True, "data": product_data}), 200
+        
+        elif request.method == 'PUT':
+            data = request.json
+            update_data = {k: v for k, v in data.items() if k not in ['size_stocks', 'size_chart_template_id'] and v is not None}
+            
+            # Handle size_chart_template_id
+            if 'size_chart_template_id' in data:
+                template_id = data['size_chart_template_id']
+                update_data['size_chart_template_id'] = template_id
+                
+                # Auto-create product_sizes if template is assigned
+                if template_id:
+                    try:
+                        # Get template rows
+                        template_rows = supabase.table('size_chart_rows').select('id, size_label').eq('template_id', template_id).execute()
+                        
+                        if template_rows.data:
+                            # Get existing product_sizes
+                            existing_sizes = supabase.table('product_sizes').select('id, size_chart_row_id').eq('product_id', product_id).execute()
+                            existing_row_ids = {s['size_chart_row_id'] for s in (existing_sizes.data or [])}
+                            
+                            # Create missing product_sizes
+                            for row in template_rows.data:
+                                if row['id'] not in existing_row_ids:
+                                    supabase.table('product_sizes').insert({
+                                        'product_id': product_id,
+                                        'size_chart_row_id': row['id']
+                                    }).execute()
+                    except Exception as e:
+                        print(f"Warning: Could not auto-create product_sizes: {e}")
+            
+            # Update product
+            response = supabase.table('products').update(update_data).eq('id', product_id).execute()
+            
+            # Handle size stock updates
+            if 'size_stocks' in data and data['size_stocks']:
+                try:
+                    size_stocks = data['size_stocks']  # Array of {row_id, stock}
+                    
+                    for stock_item in size_stocks:
+                        row_id = stock_item.get('row_id')
+                        stock = stock_item.get('stock', 0)
+                        
+                        if row_id:
+                            # Find product_size_id
+                            product_size = supabase.table('product_sizes').select('id').eq('product_id', product_id).eq('size_chart_row_id', row_id).execute()
+                            
+                            if product_size.data:
+                                product_size_id = product_size.data[0]['id']
+                                
+                                # Update or insert stock (column is stock_quantity, not stock)
+                                existing_stock = supabase.table('product_size_stock').select('id').eq('product_size_id', product_size_id).execute()
+                                
+                                if existing_stock.data:
+                                    supabase.table('product_size_stock').update({'stock_quantity': stock}).eq('product_size_id', product_size_id).execute()
+                                else:
+                                    supabase.table('product_size_stock').insert({
+                                        'product_size_id': product_size_id,
+                                        'stock_quantity': stock
+                                    }).execute()
+                except Exception as e:
+                    print(f"Warning: Could not update size stock: {e}")
+            
+            return jsonify({"success": True, "data": response.data[0] if response.data else None}), 200
+        
+        elif request.method == 'DELETE':
+            supabase.table('products').delete().eq('id', product_id).execute()
+            return jsonify({"success": True, "message": "Product deleted"}), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# ============================================
+# ADMIN ORDERS APIs
+# ============================================
+
+@app.route('/api/admin/orders', methods=['GET'])
+def admin_orders():
+    """Get all orders"""
+    try:
+        page = request.args.get('page', 1, type=int)
+        limit = request.args.get('limit', 20, type=int)
+        status = request.args.get('status', '')
+        offset = (page - 1) * limit
+        
+        query = supabase.table('orders').select('*, customers(*)', count='exact')
+        if status:
+            query = query.eq('status', status)
+        
+        response = query.order('created_at', desc=True).range(offset, offset + limit - 1).execute()
+        
+        return jsonify({
+            "success": True,
+            "data": response.data or [],
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": response.count or 0,
+                "total_pages": ((response.count or 0) + limit - 1) // limit
+            }
+        }), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/admin/orders/stats', methods=['GET'])
+def admin_orders_stats():
+    """Get order statistics"""
+    try:
+        response = supabase.table('orders').select('status').execute()
+        orders = response.data or []
+        from collections import Counter
+        status_counts = Counter(o.get('status') for o in orders)
+        return jsonify({
+            "success": True,
+            "data": {
+                "pending": status_counts.get('pending', 0),
+                "processing": status_counts.get('processing', 0),
+                "completed": status_counts.get('completed', 0) + status_counts.get('delivered', 0),
+                "failed": status_counts.get('failed', 0),
+                "returned": status_counts.get('returned', 0)
+            }
+        }), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/admin/orders/<order_id>', methods=['GET'])
+def admin_order_detail(order_id):
+    """Get order details"""
+    try:
+        response = supabase.table('orders').select('*, customers(*), order_items(*)').eq('id', order_id).execute()
+        if not response.data:
+            return jsonify({"success": False, "message": "Order not found"}), 404
+        return jsonify({"success": True, "data": response.data[0]}), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/admin/orders/<order_id>/status', methods=['PUT'])
+def admin_order_status(order_id):
+    """Update order status"""
+    try:
+        data = request.json
+        status = data.get('status')
+        response = supabase.table('orders').update({'status': status}).eq('id', order_id).execute()
+        return jsonify({
+            "success": True,
+            "data": response.data[0] if response.data else None,
+            "message": "Order status updated"
+        }), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# ============================================
+# ADMIN CUSTOMERS APIs
+# ============================================
+
+@app.route('/api/admin/customers', methods=['GET'])
+def admin_customers():
+    """Get all customers"""
+    try:
+        page = request.args.get('page', 1, type=int)
+        limit = request.args.get('limit', 20, type=int)
+        search = request.args.get('search', '')
+        customer_type = request.args.get('customer_type', 'all')
+        offset = (page - 1) * limit
+        
+        query = supabase.table('customers').select('*', count='exact')
+        if search:
+            query = query.or_(f"full_name.ilike.%{search}%,email.ilike.%{search}%")
+        
+        response = query.order('created_at', desc=True).range(offset, offset + limit - 1).execute()
+        
+        # Add customer_type based on user_id presence
+        customers = []
+        for c in response.data or []:
+            c['customer_type'] = 'verified' if c.get('user_id') else 'cold'
+            if customer_type == 'all' or c['customer_type'] == customer_type:
+                customers.append(c)
+        
+        return jsonify({
+            "success": True,
+            "data": customers,
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": response.count or 0,
+                "total_pages": ((response.count or 0) + limit - 1) // limit
+            }
+        }), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/admin/customers/stats', methods=['GET'])
+def admin_customers_stats():
+    """Get customer statistics"""
+    try:
+        response = supabase.table('customers').select('id, created_at, user_id', count='exact').execute()
+        customers = response.data or []
+        
+        from datetime import datetime
+        current_month = datetime.now().strftime('%Y-%m')
+        new_this_month = sum(1 for c in customers if c.get('created_at', '').startswith(current_month))
+        
+        return jsonify({
+            "success": True,
+            "data": {
+                "total": len(customers),
+                "active": len(customers),
+                "new_this_month": new_this_month,
+                "total_revenue": 0
+            }
+        }), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# ============================================
+# ADMIN DASHBOARD APIs
+# ============================================
+
+@app.route('/api/admin/dashboard/stats', methods=['GET'])
+def admin_dashboard_stats():
+    """Get dashboard statistics"""
+    try:
+        products_response = supabase.table('products').select('id, stock, price', count='exact').execute()
+        products = products_response.data or []
+        total_products = products_response.count or len(products)
+        low_stock_count = sum(1 for p in products if 0 < (p.get('stock') or 0) <= 10)
+        
+        orders_response = supabase.table('orders').select('id, status, total', count='exact').execute()
+        orders = orders_response.data or []
+        total_orders = orders_response.count or len(orders)
+        total_revenue = sum(float(o.get('total', 0)) for o in orders if o.get('status') not in ['cancelled', 'failed'])
+        pending_orders = sum(1 for o in orders if o.get('status') == 'pending')
+        completed_orders = sum(1 for o in orders if o.get('status') in ['completed', 'delivered'])
+        failed_orders = sum(1 for o in orders if o.get('status') == 'failed')
+        returned_orders = sum(1 for o in orders if o.get('status') == 'returned')
+        
+        customers_response = supabase.table('customers').select('id', count='exact').execute()
+        new_customers = customers_response.count or 0
+        
+        return jsonify({
+            "success": True,
+            "data": {
+                "total_revenue": round(total_revenue, 2),
+                "total_orders": total_orders,
+                "new_customers": new_customers,
+                "total_products": total_products,
+                "low_stock_count": low_stock_count,
+                "pending_orders": pending_orders,
+                "completed_orders": completed_orders,
+                "failed_orders": failed_orders,
+                "returned_orders": returned_orders
+            }
+        }), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/admin/dashboard/sales', methods=['GET'])
+def admin_dashboard_sales():
+    """Get sales data for charts"""
+    try:
+        orders_response = supabase.table('orders').select('total, created_at, status').execute()
+        orders = orders_response.data or []
+        
+        from datetime import datetime
+        from collections import defaultdict
+        sales_by_period = defaultdict(float)
+        
+        for order in orders:
+            if order.get('status') in ['cancelled', 'failed']:
+                continue
+            try:
+                created_at = datetime.fromisoformat(order['created_at'].replace('Z', '+00:00'))
+                key = created_at.strftime('%b')
+                sales_by_period[key] += float(order.get('total', 0))
+            except:
+                pass
+        
+        months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        sales_data = [{"name": m, "revenue": round(sales_by_period.get(m, 0), 2)} for m in months]
+        
+        return jsonify({"success": True, "data": sales_data}), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/admin/dashboard/best-selling', methods=['GET'])
+def admin_dashboard_best_selling():
+    """Get best selling products"""
+    try:
+        limit = request.args.get('limit', 5, type=int)
+        products_response = supabase.table('products').select('id, name, stock').execute()
+        products = {p['id']: p for p in (products_response.data or [])}
+        
+        items_response = supabase.table('order_items').select('product_id, quantity').execute()
+        from collections import defaultdict
+        sales_count = defaultdict(int)
+        for item in (items_response.data or []):
+            sales_count[item['product_id']] += item.get('quantity', 1)
+        
+        best_selling = []
+        for product_id, sales in sorted(sales_count.items(), key=lambda x: x[1], reverse=True)[:limit]:
+            product = products.get(product_id, {})
+            best_selling.append({
+                "id": product_id,
+                "name": product.get('name', 'Unknown'),
+                "sales": sales,
+                "stock": product.get('stock', 0)
+            })
+        
+        return jsonify({"success": True, "data": best_selling}), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/admin/dashboard/low-stock', methods=['GET'])
+def admin_dashboard_low_stock():
+    """Get low stock items"""
+    try:
+        limit = request.args.get('limit', 10, type=int)
+        response = supabase.table('products').select('id, name, stock, category').lte('stock', 10).gt('stock', 0).order('stock').limit(limit).execute()
+        return jsonify({"success": True, "data": response.data or []}), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# ============================================
+# ADMIN DISCOUNTS APIs
+# ============================================
+
+@app.route('/api/admin/discounts', methods=['GET', 'POST'])
+def admin_discounts():
+    """Get all discounts or create a new discount"""
+    try:
+        if request.method == 'GET':
+            page = request.args.get('page', 1, type=int)
+            limit = request.args.get('limit', 20, type=int)
+            search = request.args.get('search', '')
+            offset = (page - 1) * limit
+            
+            query = supabase.table('discounts').select('*', count='exact')
+            if search:
+                query = query.ilike('code', f'%{search}%')
+            
+            response = query.order('created_at', desc=True).range(offset, offset + limit - 1).execute()
+            
+            return jsonify({
+                "success": True,
+                "data": response.data or [],
+                "pagination": {
+                    "page": page,
+                    "limit": limit,
+                    "total": response.count or 0,
+                    "total_pages": ((response.count or 0) + limit - 1) // limit
+                }
+            }), 200
+        
+        elif request.method == 'POST':
+            data = request.json
+            discount_data = {
+                'code': data.get('code'),
+                'discount': data.get('discount'),
+                'type': data.get('type', 'percentage'),
+                'expiration_date': data.get('expiration_date'),
+                'status': 'active',
+                'usage_limit': data.get('usage_limit', 100),
+                'usage_count': 0,
+                'min_order_value': data.get('min_order_value', 0)
+            }
+            response = supabase.table('discounts').insert(discount_data).execute()
+            return jsonify({
+                "success": True,
+                "data": response.data[0] if response.data else None,
+                "message": "Discount created successfully"
+            }), 201
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/admin/discounts/stats', methods=['GET'])
+def admin_discounts_stats():
+    """Get discount statistics"""
+    try:
+        response = supabase.table('discounts').select('*').execute()
+        discounts = response.data or []
+        
+        from datetime import datetime
+        now = datetime.now()
+        
+        active = sum(1 for d in discounts if d.get('status') == 'active')
+        expired = sum(1 for d in discounts if d.get('status') == 'expired')
+        total_uses = sum(d.get('usage_count', 0) for d in discounts)
+        discount_value_given = sum(d.get('usage_count', 0) * d.get('discount', 0) for d in discounts)
+        
+        return jsonify({
+            "success": True,
+            "data": {
+                "active": active,
+                "total_uses": total_uses,
+                "discount_value_given": round(discount_value_given, 2),
+                "expired": expired
+            }
+        }), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/admin/discounts/<discount_id>', methods=['GET', 'PUT', 'DELETE'])
+def admin_discount_detail(discount_id):
+    """Get, update or delete a discount"""
+    try:
+        if request.method == 'GET':
+            response = supabase.table('discounts').select('*').eq('id', discount_id).execute()
+            if not response.data:
+                return jsonify({"success": False, "message": "Discount not found"}), 404
+            return jsonify({"success": True, "data": response.data[0]}), 200
+        
+        elif request.method == 'PUT':
+            data = request.json
+            update_data = {k: v for k, v in data.items() if v is not None}
+            response = supabase.table('discounts').update(update_data).eq('id', discount_id).execute()
+            return jsonify({"success": True, "data": response.data[0] if response.data else None}), 200
+        
+        elif request.method == 'DELETE':
+            supabase.table('discounts').delete().eq('id', discount_id).execute()
+            return jsonify({"success": True, "message": "Discount deleted"}), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# ============================================
 # SIZE CHART MANAGEMENT APIs
 # ============================================
 
 @app.route('/api/admin/size-charts/templates', methods=['GET', 'POST'])
 def admin_size_chart_templates():
-    """
-    GET: List all size chart templates
-    POST: Create a new size chart template
-    """
+    """List or create size chart templates"""
     try:
         if request.method == 'GET':
             response = supabase.table('size_chart_templates').select('*').order('created_at', desc=True).execute()
-            return jsonify({
-                "success": True,
-                "data": response.data or []
-            }), 200
+            return jsonify({"success": True, "data": response.data or []}), 200
         
         elif request.method == 'POST':
             data = request.json
-            name = data.get('name')
-            description = data.get('description', '')
-            
-            if not name:
-                return jsonify({
-                    "success": False,
-                    "message": "Template name is required"
-                }), 400
-            
             response = supabase.table('size_chart_templates').insert({
-                'name': name,
-                'description': description
+                'name': data.get('name'),
+                'description': data.get('description', '')
             }).execute()
-            
             return jsonify({
                 "success": True,
                 "data": response.data[0] if response.data else None,
                 "message": "Template created successfully"
             }), 201
-            
     except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route('/api/admin/size-charts/templates/<int:template_id>', methods=['GET', 'PUT', 'DELETE'])
 def admin_size_chart_template(template_id):
-    """
-    GET: Get a specific size chart template with all its data
-    PUT: Update template name/description
-    DELETE: Delete a template
-    """
+    """Get, update or delete a size chart template"""
     try:
         if request.method == 'GET':
-            # Get template
             template_response = supabase.table('size_chart_templates').select('*').eq('id', template_id).execute()
-            
             if not template_response.data:
-                return jsonify({
-                    "success": False,
-                    "message": "Template not found"
-                }), 404
+                return jsonify({"success": False, "message": "Template not found"}), 404
             
             template = template_response.data[0]
-            
-            # Get rows (sizes)
             rows_response = supabase.table('size_chart_rows').select('*').eq('template_id', template_id).order('sort_order').execute()
-            rows = rows_response.data or []
-            
-            # Get columns (measurements)
             columns_response = supabase.table('size_chart_columns').select('*').eq('template_id', template_id).order('sort_order').execute()
+            
+            rows = rows_response.data or []
             columns = columns_response.data or []
+            row_ids = [r['id'] for r in rows]
             
-            # Get values
-            row_ids = [row['id'] for row in rows]
-            column_ids = [col['id'] for col in columns]
-            
-            values = []
             values_grid = {}
-            if row_ids and column_ids:
-                values_response = supabase.table('size_chart_values').select('*').in_('row_id', row_ids).in_('column_id', column_ids).execute()
-                values = values_response.data or []
-                
-                # Build grid (row_label -> column_key -> value)
+            if row_ids:
+                values_response = supabase.table('size_chart_values').select('*').in_('row_id', row_ids).execute()
                 row_map = {r['id']: r['size_label'] for r in rows}
                 col_map = {c['id']: c['column_key'] for c in columns}
-                
-                for val in values:
+                for val in (values_response.data or []):
                     row_label = row_map.get(val['row_id'])
                     col_key = col_map.get(val['column_id'])
                     if row_label and col_key:
@@ -2176,182 +2698,85 @@ def admin_size_chart_template(template_id):
                             values_grid[row_label] = {}
                         values_grid[row_label][col_key] = val['value']
             
-            # Flat values for backward compatibility
-            value_flat = {}
-            for val in values:
-                key = f"{val['row_id']}_{val['column_id']}"
-                value_flat[key] = val['value']
-            
             template['rows'] = rows
             template['columns'] = columns
-            template['values'] = value_flat
             template['values_grid'] = values_grid
             
-            return jsonify({
-                "success": True,
-                "data": template
-            }), 200
+            return jsonify({"success": True, "data": template}), 200
         
         elif request.method == 'PUT':
             data = request.json
             update_data = {}
-            if 'name' in data:
-                update_data['name'] = data['name']
-            if 'description' in data:
-                update_data['description'] = data['description']
-            
-            if not update_data:
-                return jsonify({
-                    "success": False,
-                    "message": "No data to update"
-                }), 400
-            
+            if 'name' in data: update_data['name'] = data['name']
+            if 'description' in data: update_data['description'] = data['description']
             response = supabase.table('size_chart_templates').update(update_data).eq('id', template_id).execute()
-            
-            return jsonify({
-                "success": True,
-                "data": response.data[0] if response.data else None,
-                "message": "Template updated successfully"
-            }), 200
+            return jsonify({"success": True, "data": response.data[0] if response.data else None}), 200
         
         elif request.method == 'DELETE':
-            # Delete associated values first
             rows_response = supabase.table('size_chart_rows').select('id').eq('template_id', template_id).execute()
             row_ids = [r['id'] for r in rows_response.data or []]
             if row_ids:
                 supabase.table('size_chart_values').delete().in_('row_id', row_ids).execute()
-            
-            # Delete rows and columns
             supabase.table('size_chart_rows').delete().eq('template_id', template_id).execute()
             supabase.table('size_chart_columns').delete().eq('template_id', template_id).execute()
-            
-            # Delete template
             supabase.table('size_chart_templates').delete().eq('id', template_id).execute()
-            
-            return jsonify({
-                "success": True,
-                "message": "Template deleted successfully"
-            }), 200
-            
+            return jsonify({"success": True, "message": "Template deleted"}), 200
     except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route('/api/admin/size-charts/templates/<int:template_id>/rows', methods=['POST'])
 def admin_size_chart_add_row(template_id):
-    """Add a new size row to a template"""
+    """Add a row to size chart"""
     try:
         data = request.json
-        size_label = data.get('size_label')
-        sort_order = data.get('sort_order', 0)
-        
-        if not size_label:
-            return jsonify({
-                "success": False,
-                "message": "Size label is required"
-            }), 400
-        
         response = supabase.table('size_chart_rows').insert({
             'template_id': template_id,
-            'size_label': size_label,
-            'sort_order': sort_order
+            'size_label': data.get('size_label'),
+            'sort_order': data.get('sort_order', 0)
         }).execute()
-        
-        return jsonify({
-            "success": True,
-            "data": response.data[0] if response.data else None,
-            "message": "Row added successfully"
-        }), 201
-        
+        return jsonify({"success": True, "data": response.data[0] if response.data else None}), 201
     except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route('/api/admin/size-charts/templates/<int:template_id>/rows/<int:row_id>', methods=['DELETE'])
 def admin_size_chart_delete_row(template_id, row_id):
-    """Delete a size row"""
+    """Delete a row from size chart"""
     try:
-        # Delete associated values first
         supabase.table('size_chart_values').delete().eq('row_id', row_id).execute()
-        
-        # Delete row
         supabase.table('size_chart_rows').delete().eq('id', row_id).execute()
-        
-        return jsonify({
-            "success": True,
-            "message": "Row deleted successfully"
-        }), 200
-        
+        return jsonify({"success": True, "message": "Row deleted"}), 200
     except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route('/api/admin/size-charts/templates/<int:template_id>/columns', methods=['POST'])
 def admin_size_chart_add_column(template_id):
-    """Add a new measurement column to a template"""
+    """Add a column to size chart"""
     try:
         data = request.json
-        column_key = data.get('column_key')
-        display_name = data.get('display_name')
-        unit = data.get('unit', 'cm')
-        sort_order = data.get('sort_order', 0)
-        
-        if not column_key or not display_name:
-            return jsonify({
-                "success": False,
-                "message": "Column key and display name are required"
-            }), 400
-        
         response = supabase.table('size_chart_columns').insert({
             'template_id': template_id,
-            'column_key': column_key,
-            'display_name': display_name,
-            'unit': unit,
-            'sort_order': sort_order
+            'column_key': data.get('column_key'),
+            'display_name': data.get('display_name'),
+            'unit': data.get('unit', 'cm'),
+            'sort_order': data.get('sort_order', 0)
         }).execute()
-        
-        return jsonify({
-            "success": True,
-            "data": response.data[0] if response.data else None,
-            "message": "Column added successfully"
-        }), 201
-        
+        return jsonify({"success": True, "data": response.data[0] if response.data else None}), 201
     except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route('/api/admin/size-charts/templates/<int:template_id>/columns/<int:column_id>', methods=['DELETE'])
 def admin_size_chart_delete_column(template_id, column_id):
-    """Delete a measurement column"""
+    """Delete a column from size chart"""
     try:
-        # Delete associated values first
         supabase.table('size_chart_values').delete().eq('column_id', column_id).execute()
-        
-        # Delete column
         supabase.table('size_chart_columns').delete().eq('id', column_id).execute()
-        
-        return jsonify({
-            "success": True,
-            "message": "Column deleted successfully"
-        }), 200
-        
+        return jsonify({"success": True, "message": "Column deleted"}), 200
     except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route('/api/admin/size-charts/templates/<int:template_id>/values', methods=['PUT'])
@@ -2367,9 +2792,7 @@ def admin_size_chart_update_values(template_id):
             value = val.get('value', '')
             
             if row_id and column_id:
-                # Upsert value
                 existing = supabase.table('size_chart_values').select('id').eq('row_id', row_id).eq('column_id', column_id).execute()
-                
                 if existing.data:
                     supabase.table('size_chart_values').update({'value': value}).eq('id', existing.data[0]['id']).execute()
                 else:
@@ -2379,87 +2802,348 @@ def admin_size_chart_update_values(template_id):
                         'value': value
                     }).execute()
         
+        return jsonify({"success": True, "message": "Values updated"}), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# ============================================
+# IMAGE UPLOAD APIs
+# ============================================
+
+@app.route('/api/admin/upload/image', methods=['POST'])
+def admin_upload_image():
+    """Upload image to Supabase Storage"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({"success": False, "error": "No file provided"}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({"success": False, "error": "No file selected"}), 400
+        
+        # Check file type
+        allowed_types = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+        if file.content_type not in allowed_types:
+            return jsonify({"success": False, "error": "Invalid file type. Allowed: JPEG, PNG, WebP, GIF"}), 400
+        
+        # Generate unique filename
+        ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else 'jpg'
+        unique_filename = f"products/{uuid.uuid4()}.{ext}"
+        
+        # Read file content
+        file_content = file.read()
+        
+        # Upload to Supabase Storage
+        response = supabase.storage.from_('product-images').upload(
+            unique_filename,
+            file_content,
+            {"content-type": file.content_type}
+        )
+        
+        # Get public URL
+        public_url = supabase.storage.from_('product-images').get_public_url(unique_filename)
+        
         return jsonify({
             "success": True,
-            "message": "Values updated successfully"
+            "data": {
+                "url": public_url,
+                "path": unique_filename
+            }
         }), 200
-        
     except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/admin/upload/images', methods=['POST'])
+def admin_upload_multiple_images():
+    """Upload multiple images to Supabase Storage"""
+    try:
+        if 'files' not in request.files:
+            return jsonify({"success": False, "error": "No files provided"}), 400
+        
+        files = request.files.getlist('files')
+        if not files:
+            return jsonify({"success": False, "error": "No files selected"}), 400
+        
+        uploaded = []
+        errors = []
+        
+        for file in files:
+            if file.filename == '':
+                continue
+            
+            # Check file type
+            allowed_types = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+            if file.content_type not in allowed_types:
+                errors.append(f"{file.filename}: Invalid file type")
+                continue
+            
+            try:
+                # Generate unique filename
+                ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else 'jpg'
+                unique_filename = f"products/{uuid.uuid4()}.{ext}"
+                
+                # Read file content
+                file_content = file.read()
+                
+                # Upload to Supabase Storage
+                supabase.storage.from_('product-images').upload(
+                    unique_filename,
+                    file_content,
+                    {"content-type": file.content_type}
+                )
+                
+                # Get public URL
+                public_url = supabase.storage.from_('product-images').get_public_url(unique_filename)
+                
+                uploaded.append({
+                    "url": public_url,
+                    "path": unique_filename,
+                    "original_name": file.filename
+                })
+            except Exception as e:
+                errors.append(f"{file.filename}: {str(e)}")
+        
         return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
+            "success": True,
+            "data": {
+                "uploaded": uploaded,
+                "errors": errors
+            }
+        }), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
-@app.route('/api/admin/size-charts/templates/<int:template_id>/structure', methods=['PUT'])
-def admin_size_chart_bulk_update(template_id):
-    """Bulk update template structure (rows, columns, values)"""
+@app.route('/api/admin/upload/delete', methods=['DELETE'])
+def admin_delete_image():
+    """Delete image from Supabase Storage"""
     try:
         data = request.json
-        rows_data = data.get('rows', [])
-        columns_data = data.get('columns', [])
-        values_data = data.get('values', [])
+        path = data.get('path')
         
-        # Get existing rows and columns
-        existing_rows_response = supabase.table('size_chart_rows').select('id').eq('template_id', template_id).execute()
-        existing_row_ids = [r['id'] for r in existing_rows_response.data or []]
+        if not path:
+            return jsonify({"success": False, "error": "No path provided"}), 400
         
-        # Delete existing values, rows, columns
-        if existing_row_ids:
-            supabase.table('size_chart_values').delete().in_('row_id', existing_row_ids).execute()
-        supabase.table('size_chart_rows').delete().eq('template_id', template_id).execute()
-        supabase.table('size_chart_columns').delete().eq('template_id', template_id).execute()
+        # Delete from Supabase Storage
+        supabase.storage.from_('product-images').remove([path])
         
-        # Insert new rows
-        row_map = {}
-        for row in rows_data:
-            response = supabase.table('size_chart_rows').insert({
-                'template_id': template_id,
-                'size_label': row['size_label'],
-                'sort_order': row.get('sort_order', 0)
-            }).execute()
-            if response.data:
-                row_map[row['size_label']] = response.data[0]['id']
+        return jsonify({"success": True, "message": "Image deleted"}), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# ============================================
+# VIRTUAL TRY-ON (TRIAL ROOM) API
+# ============================================
+
+# Gemini API Configuration
+GEMINI_API_KEY = os.getenv('GEMINI_IMAGE_API', 'AIzaSyD0kTCHESelVNPQFQg7gyYJca9_cZdOMQo')
+GEMINI_MODEL = "gemini-2.0-flash-exp"  # Image generation model
+
+
+def load_image_from_file(file) -> genai.types.Part:
+    """Loads an uploaded file and converts it into a GenAI Part object."""
+    try:
+        img = Image.open(file)
+        img_format = img.format if img.format else 'PNG'
+        mime_type = Image.MIME.get(img_format.upper()) or 'image/png'
         
-        # Insert new columns
-        col_map = {}
-        for col in columns_data:
-            response = supabase.table('size_chart_columns').insert({
-                'template_id': template_id,
-                'column_key': col['column_key'],
-                'display_name': col['display_name'],
-                'unit': col.get('unit', 'cm'),
-                'sort_order': col.get('sort_order', 0)
-            }).execute()
-            if response.data:
-                col_map[col['column_key']] = response.data[0]['id']
+        img_byte_arr = BytesIO()
+        # Convert to RGB if necessary (for JPEG compatibility)
+        if img.mode in ('RGBA', 'P'):
+            img = img.convert('RGB')
+            img_format = 'JPEG'
+            mime_type = 'image/jpeg'
+        img.save(img_byte_arr, format=img_format)
         
-        # Insert values
-        for val in values_data:
-            row_label = val.get('row_label')
-            col_key = val.get('column_key')
-            value = val.get('value', '')
-            
-            row_id = row_map.get(row_label)
-            col_id = col_map.get(col_key)
-            
-            if row_id and col_id:
-                supabase.table('size_chart_values').insert({
-                    'row_id': row_id,
-                    'column_id': col_id,
-                    'value': value
-                }).execute()
+        return genai.types.Part.from_bytes(
+            data=img_byte_arr.getvalue(),
+            mime_type=mime_type
+        )
+    except Exception as e:
+        raise Exception(f"Error processing image: {e}")
+
+
+def load_image_from_url(image_url: str) -> genai.types.Part:
+    """Loads an image from URL and converts it into a GenAI Part object."""
+    try:
+        response = requests.get(image_url, timeout=10)
+        response.raise_for_status()
+        
+        img = Image.open(BytesIO(response.content))
+        img_format = img.format if img.format else 'PNG'
+        mime_type = Image.MIME.get(img_format.upper()) or 'image/png'
+        
+        img_byte_arr = BytesIO()
+        if img.mode in ('RGBA', 'P'):
+            img = img.convert('RGB')
+            img_format = 'JPEG'
+            mime_type = 'image/jpeg'
+        img.save(img_byte_arr, format=img_format)
+        
+        return genai.types.Part.from_bytes(
+            data=img_byte_arr.getvalue(),
+            mime_type=mime_type
+        )
+    except Exception as e:
+        raise Exception(f"Error loading image from URL: {e}")
+
+
+@app.route('/api/virtual-try-on', methods=['POST'])
+def virtual_try_on():
+    """
+    Virtual Try-On API - Generate an image of a person wearing a product
+    
+    Accepts:
+    - person_image: File upload of the person's photo
+    - product_image_url: URL of the product image (from database)
+    OR
+    - person_image: File upload
+    - product_image: File upload
+    
+    Returns:
+    - Base64 encoded image of the person wearing the product
+    """
+    try:
+        if not GEMINI_API_KEY:
+            return jsonify({
+                "success": False, 
+                "error": "Gemini API key not configured"
+            }), 500
+        
+        # Get person image (required - uploaded by user)
+        if 'person_image' not in request.files:
+            return jsonify({
+                "success": False, 
+                "error": "Please upload your photo"
+            }), 400
+        
+        person_file = request.files['person_image']
+        if person_file.filename == '':
+            return jsonify({
+                "success": False, 
+                "error": "No person image selected"
+            }), 400
+        
+        # Get product image (either from URL or file upload)
+        product_image_url = request.form.get('product_image_url')
+        product_file = request.files.get('product_image')
+        
+        if not product_image_url and not product_file:
+            return jsonify({
+                "success": False, 
+                "error": "Product image is required"
+            }), 400
+        
+        # Load images as GenAI Parts
+        person_part = load_image_from_file(person_file)
+        
+        if product_image_url:
+            product_part = load_image_from_url(product_image_url)
+        else:
+            product_part = load_image_from_file(product_file)
+        
+        # Create the prompt for virtual try-on
+        # IMPORTANT: First image is the PERSON (keep unchanged), Second image is the CLOTHING (extract design)
+        prompt = """Take the T-shirt pattern/design from the second image and composite it onto the person in the first image, 
+as if the person is realistically wearing that T-shirt. Ensure correct texture, folds, and lighting. 
+The final image should only show the person wearing the new shirt.
+
+CRITICAL: The FIRST image is the PERSON - keep their face, body, pose, and background EXACTLY as they are. 
+Only replace the clothing they are wearing with the T-shirt design from the SECOND image. 
+Do NOT recreate or modify the person's image - use the exact person from the first image."""
+        
+        # Build the content list - ORDER IS CRITICAL: Person first, Product second
+        contents = [
+            person_part,   # Image 1: The person (DO NOT MODIFY)
+            product_part,  # Image 2: The clothing item (EXTRACT DESIGN FROM THIS)
+            prompt         # The instruction
+        ]
+        
+        # Initialize Gemini client
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        
+        # Generate the image
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=contents,
+            config=genai.types.GenerateContentConfig(
+                response_modalities=['image', 'text']
+            )
+        )
+        
+        # Extract the generated image
+        image_part = None
+        if response.candidates and response.candidates[0].content.parts:
+            for part in response.candidates[0].content.parts:
+                if hasattr(part, 'inline_data') and part.inline_data:
+                    image_part = part.inline_data
+                    break
+        
+        if not image_part:
+            # Check if there's a text response (error message)
+            text_response = ""
+            if response.text:
+                text_response = response.text
+            return jsonify({
+                "success": False, 
+                "error": "Failed to generate try-on image. The AI model could not process the images.",
+                "details": text_response[:500] if text_response else "No additional details"
+            }), 500
+        
+        # Convert to base64 for frontend display
+        image_bytes = image_part.data
+        base64_image = base64.b64encode(image_bytes).decode('utf-8')
+        mime_type = image_part.mime_type or 'image/png'
         
         return jsonify({
             "success": True,
-            "message": "Template structure updated successfully"
+            "data": {
+                "image": f"data:{mime_type};base64,{base64_image}",
+                "mime_type": mime_type
+            }
         }), 200
         
     except Exception as e:
+        print(f"Virtual try-on error: {str(e)}")
         return jsonify({
-            "success": False,
-            "error": str(e)
+            "success": False, 
+            "error": f"Virtual try-on failed: {str(e)}"
         }), 500
+
+
+@app.route('/api/virtual-try-on/download', methods=['POST'])
+def download_try_on_image():
+    """Download the generated try-on image"""
+    try:
+        data = request.json
+        image_data = data.get('image')  # Base64 data URL
+        
+        if not image_data:
+            return jsonify({"success": False, "error": "No image data provided"}), 400
+        
+        # Remove the data URL prefix
+        if ',' in image_data:
+            image_data = image_data.split(',')[1]
+        
+        # Decode base64
+        image_bytes = base64.b64decode(image_data)
+        
+        # Create file-like object
+        image_buffer = BytesIO(image_bytes)
+        image_buffer.seek(0)
+        
+        return send_file(
+            image_buffer,
+            mimetype='image/png',
+            as_attachment=True,
+            download_name=f'virtual_try_on_{uuid.uuid4().hex[:8]}.png'
+        )
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 if __name__ == '__main__':

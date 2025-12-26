@@ -1,14 +1,22 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Heart, Minus, Plus, Store, Loader2 } from "lucide-react"
+import { Heart, Minus, Plus, Store, Loader2, Ruler } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Star } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { getProduct, addToCart, type Product } from "@/lib/api"
+import { TrialRoom } from "@/components/trial-room"
 
 interface ProductDetailsProps {
   productId: string
+}
+
+interface SizeStock {
+  size: string
+  stock: number
+  status: 'in_stock' | 'low_stock' | 'out_of_stock'
 }
 
 export function ProductDetails({ productId }: ProductDetailsProps) {
@@ -19,6 +27,7 @@ export function ProductDetails({ productId }: ProductDetailsProps) {
   const [quantity, setQuantity] = useState(1)
   const [addingToCart, setAddingToCart] = useState(false)
   const [selectedImageIndex, setSelectedImageIndex] = useState(0)
+  const [sizeStocks, setSizeStocks] = useState<SizeStock[]>([])
 
   useEffect(() => {
     async function fetchProduct() {
@@ -28,11 +37,30 @@ export function ProductDetails({ productId }: ProductDetailsProps) {
         if (response.success && response.data) {
           setProduct(response.data)
           // Set default selections
+        } else {
+          console.error('Product not found:', response.error || response.message)
+          // Product will remain null, which will show "Product not found" message
           if (response.data.color && response.data.color.length > 0) {
             setSelectedColor(response.data.color[0])
           }
           if (response.data.size && response.data.size.length > 0) {
             setSelectedSize(response.data.size[0])
+            
+            // Generate size stocks based on product stock
+            // In a real app, this would come from the API per size
+            const productData = response.data
+            const totalStock = productData.stock || 0
+            const sizeCount = productData.size?.length || 1
+            const stockPerSize = Math.floor(totalStock / sizeCount)
+            const stocks: SizeStock[] = (productData.size || []).map((size: string, index: number) => {
+              const sizeStock = index === 0 ? stockPerSize + (totalStock % sizeCount) : stockPerSize
+              return {
+                size,
+                stock: sizeStock,
+                status: sizeStock > 10 ? 'in_stock' : sizeStock > 0 ? 'low_stock' : 'out_of_stock'
+              }
+            })
+            setSizeStocks(stocks)
           }
         }
       } catch (error) {
@@ -75,6 +103,10 @@ export function ProductDetails({ productId }: ProductDetailsProps) {
     } finally {
       setAddingToCart(false)
     }
+  }
+
+  const getSelectedSizeStock = () => {
+    return sizeStocks.find(s => s.size === selectedSize)
   }
 
   if (loading) {
@@ -137,6 +169,8 @@ export function ProductDetails({ productId }: ProductDetailsProps) {
     'Khaki': 'bg-yellow-700',
     'Beige': 'bg-amber-200',
   }
+
+  const selectedStock = getSelectedSizeStock()
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 mb-16">
@@ -232,26 +266,130 @@ export function ProductDetails({ productId }: ProductDetailsProps) {
           </div>
         )}
 
+        {/* Size Chart Link */}
+        {sizes.length > 0 && (
+          <div className="mb-2">
+            <Dialog>
+              <DialogTrigger asChild>
+                <button className="flex items-center gap-2 text-sm text-black hover:text-gray-700 underline underline-offset-4 font-medium">
+                  <Ruler className="w-4 h-4" />
+                  Size Chart
+                </button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Ruler className="w-5 h-5" />
+                    Size Chart
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="py-4">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="border border-gray-200 px-4 py-2 text-left font-semibold">Size</th>
+                        <th className="border border-gray-200 px-4 py-2 text-left font-semibold">Chest (in)</th>
+                        <th className="border border-gray-200 px-4 py-2 text-left font-semibold">Waist (in)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td className="border border-gray-200 px-4 py-2 font-medium">S</td>
+                        <td className="border border-gray-200 px-4 py-2">34-36</td>
+                        <td className="border border-gray-200 px-4 py-2">28-30</td>
+                      </tr>
+                      <tr>
+                        <td className="border border-gray-200 px-4 py-2 font-medium">M</td>
+                        <td className="border border-gray-200 px-4 py-2">38-40</td>
+                        <td className="border border-gray-200 px-4 py-2">32-34</td>
+                      </tr>
+                      <tr>
+                        <td className="border border-gray-200 px-4 py-2 font-medium">L</td>
+                        <td className="border border-gray-200 px-4 py-2">42-44</td>
+                        <td className="border border-gray-200 px-4 py-2">36-38</td>
+                      </tr>
+                      <tr>
+                        <td className="border border-gray-200 px-4 py-2 font-medium">XL</td>
+                        <td className="border border-gray-200 px-4 py-2">46-48</td>
+                        <td className="border border-gray-200 px-4 py-2">40-42</td>
+                      </tr>
+                      <tr>
+                        <td className="border border-gray-200 px-4 py-2 font-medium">XXL</td>
+                        <td className="border border-gray-200 px-4 py-2">50-52</td>
+                        <td className="border border-gray-200 px-4 py-2">44-46</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <p className="text-sm text-muted-foreground mt-4">
+                    * Measurements are in inches. For the best fit, measure your body and compare with the size chart.
+                  </p>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+        )}
+
         {/* Size Selection */}
         {sizes.length > 0 && (
-          <div className="mb-6">
+          <div className="mb-4">
             <div className="flex items-center justify-between mb-3">
               <label className="text-sm font-semibold">Size:</label>
-              <button className="text-sm text-muted-foreground hover:text-foreground">View size guide</button>
             </div>
             <div className="flex flex-wrap gap-2">
-              {sizes.map((size) => (
-                <button
-                  key={size}
-                  onClick={() => setSelectedSize(size)}
-                  className={`py-2 px-4 rounded-lg border ${
-                    selectedSize === size ? "border-black bg-black text-white" : "border-gray-300 hover:border-black"
-                  } transition-colors`}
-                >
-                  {size}
-                </button>
-              ))}
+              {sizes.map((size) => {
+                const stockInfo = sizeStocks.find(s => s.size === size)
+                const isOutOfStock = stockInfo?.status === 'out_of_stock'
+                return (
+                  <button
+                    key={size}
+                    onClick={() => !isOutOfStock && setSelectedSize(size)}
+                    disabled={isOutOfStock}
+                    className={`py-2 px-4 rounded-lg border ${
+                      isOutOfStock 
+                        ? "border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed line-through"
+                        : selectedSize === size 
+                          ? "border-black bg-black text-white" 
+                          : "border-gray-300 hover:border-black"
+                    } transition-colors`}
+                  >
+                    {size}
+                  </button>
+                )
+              })}
             </div>
+          </div>
+        )}
+
+        {/* Stock Report for Selected Size */}
+        {selectedStock && (
+          <div className="mb-6 p-4 rounded-lg bg-gray-50 border border-gray-200">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-gray-700">
+                Stock for size {selectedSize}:
+              </span>
+              <span className={`text-sm font-semibold ${
+                selectedStock.status === 'in_stock' 
+                  ? 'text-green-600' 
+                  : selectedStock.status === 'low_stock' 
+                    ? 'text-orange-500' 
+                    : 'text-red-600'
+              }`}>
+                {selectedStock.status === 'in_stock' && (
+                  <>✓ In Stock ({selectedStock.stock} available)</>
+                )}
+                {selectedStock.status === 'low_stock' && (
+                  <>⚠ Low Stock (Only {selectedStock.stock} left!)</>
+                )}
+                {selectedStock.status === 'out_of_stock' && (
+                  <>✕ Out of Stock</>
+                )}
+              </span>
+            </div>
+            {selectedStock.status === 'low_stock' && (
+              <p className="text-xs text-orange-600 mt-1">
+                Order soon - this size is selling fast!
+              </p>
+            )}
           </div>
         )}
 
@@ -269,37 +407,34 @@ export function ProductDetails({ productId }: ProductDetailsProps) {
           <Button 
             className="flex-1 bg-black text-white hover:bg-black/90 h-12"
             onClick={handleAddToCart}
-            disabled={addingToCart}
+            disabled={addingToCart || (selectedStock?.status === 'out_of_stock')}
           >
             {addingToCart ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 Adding...
               </>
+            ) : selectedStock?.status === 'out_of_stock' ? (
+              'Out of Stock'
             ) : (
               'Add to Cart'
             )}
           </Button>
         </div>
 
-        {/* Stock Status */}
-        {product.stock !== undefined && (
-          <div className="mb-6">
-            {product.stock > 10 ? (
-              <span className="text-green-600 text-sm">In Stock</span>
-            ) : product.stock > 0 ? (
-              <span className="text-orange-500 text-sm">Only {product.stock} left in stock</span>
-            ) : (
-              <span className="text-red-600 text-sm">Out of Stock</span>
-            )}
-          </div>
-        )}
-
         {/* Shipping Info */}
         <div className="border border-border rounded-lg p-4 space-y-3 text-sm mb-6">
           <p>
             Enjoy <strong>FREE express</strong> & <strong>Free Returns</strong> on orders over $50!
           </p>
+        </div>
+
+        {/* Virtual Trial Room */}
+        <div className="mb-6">
+          <TrialRoom 
+            productName={product.name}
+            productImageUrl={images[selectedImageIndex] || images[0] || '/placeholder.svg'}
+          />
         </div>
 
         {/* Category & Tags */}

@@ -4,12 +4,10 @@ import {
   ShoppingCart, 
   Users, 
   TrendingUp, 
-  Archive, 
+  Ruler, 
   Percent, 
   Settings,
-  Home,
-  Truck,
-  Ruler
+  Home
 } from "lucide-react";
 import { cn } from "./ui/utils";
 
@@ -24,10 +22,8 @@ const navigationItems = [
   { id: 'products', label: 'Products', icon: Package },
   { id: 'orders', label: 'Orders', icon: ShoppingCart },
   { id: 'customers', label: 'Customers', icon: Users },
-  { id: 'suppliers', label: 'Suppliers', icon: Truck },
-  { id: 'analytics', label: 'Analytics', icon: TrendingUp },
-  { id: 'stock', label: 'Stock', icon: Archive },
   { id: 'sizecharts', label: 'Size Charts', icon: Ruler },
+  { id: 'analytics', label: 'Analytics', icon: TrendingUp },
   { id: 'discounts', label: 'Discounts', icon: Percent },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];

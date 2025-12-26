@@ -14,7 +14,7 @@ export function TopSelling() {
   useEffect(() => {
     async function fetchProducts() {
       try {
-        const response = await getTopSelling(4)
+        const response = await getTopSelling()
         if (response.success && response.data) {
           setProducts(response.data)
         }
@@ -51,8 +51,8 @@ export function TopSelling() {
               </div>
             ))
           ) : products.length > 0 ? (
-            products.map((product) => (
-              <Link key={product.id} href={`/product/${product.id}`}>
+            products.map((product, index) => (
+              <Link key={product.id || `product-${index}`} href={`/product/${product.id}`}>
                 <ProductCard product={formatProductForCard(product)} />
               </Link>
             ))

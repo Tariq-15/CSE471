@@ -17,7 +17,7 @@ export function RelatedProducts({ productId }: RelatedProductsProps) {
   useEffect(() => {
     async function fetchRelated() {
       try {
-        const response = await getRelatedProducts(productId, 4)
+        const response = await getRelatedProducts(productId)
         if (response.success && response.data) {
           setProducts(response.data)
         }
@@ -67,8 +67,8 @@ export function RelatedProducts({ productId }: RelatedProductsProps) {
     <div className="mb-16">
       <h2 className="text-3xl font-bold text-center mb-8">Related Products</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {products.map((product) => (
-          <Link key={product.id} href={`/product/${product.id}`}>
+        {products.map((product, index) => (
+          <Link key={product.id || `product-${index}`} href={`/product/${product.id}`}>
             <ProductCard product={formatProductForCard(product)} />
           </Link>
         ))}
