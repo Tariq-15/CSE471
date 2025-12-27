@@ -3445,18 +3445,15 @@ def virtual_try_on():
                 "error": f"Failed to process product image: {str(e)}"
             }), 400
         
-        # The instructional prompt: explicitly request image generation
+        # The instructional prompt: essential for combining the images (exact from working code)
         prompt = (
-            """Generate an image showing the person from the first image wearing the T-shirt design from the second image.
+            """Take the T-shirt pattern/design from the second image and composite it onto the person in the first image, 
+as if the person is realistically wearing that T-shirt. Ensure correct texture, folds, and lighting. 
+The final image should only show the person wearing the new shirt.
 
-INSTRUCTIONS:
-1. The FIRST image shows a PERSON - preserve their face, body, pose, and background EXACTLY as shown
-2. The SECOND image shows a T-SHIRT/CLOTHING design
-3. Create a NEW IMAGE that shows the person wearing the T-shirt from the second image
-4. Ensure realistic texture, folds, lighting, and fit
-5. The output must be an IMAGE, not text description
-
-CRITICAL: You must OUTPUT AN IMAGE showing the person wearing the T-shirt. Do not describe it in text - generate the actual image."""
+CRITICAL: The FIRST image is the PERSON - keep their face, body, pose, and background EXACTLY as they are. 
+Only replace the clothing they are wearing with the T-shirt design from the SECOND image. 
+Do NOT recreate or modify the person's image - use the exact person from the first image."""
         )
         
         # The contents list must contain the two images and the instruction (matching working code)
@@ -3490,9 +3487,9 @@ CRITICAL: You must OUTPUT AN IMAGE showing the person wearing the T-shirt. Do no
         if not image_part:
             print("\n[Virtual Try-On] FAILURE: Image generation failed or no image data was found.")
             text_response = ""
-            if hasattr(response, 'text') and response.text:
+            if response.text:
                 text_response = response.text
-                print(f"[Virtual Try-On] Model response text: {text_response[:200]}")
+                print(f"[Virtual Try-On] Model response text (check for safety filter): {text_response[:200]}")
             return jsonify({
                 "success": False, 
                 "error": "Failed to generate try-on image. The AI model could not process the images.",
