@@ -3300,8 +3300,8 @@ def admin_delete_image():
 # ============================================
 
 # Gemini API Configuration
-GEMINI_API_KEY = os.getenv('GEMINI_IMAGE_API', 'AIzaSyD0kTCHESelVNPQFQg7gyYJca9_cZdOMQo')
-GEMINI_MODEL = "gemini-2.5-flash-image"  # Image generation model (same as working code)
+GEMINI_API_KEY = os.getenv('GEMINI_IMAGE_API', 'AIzaSyDCLW5ESXh1_wc--e1OpcTpfVBLZO8RctM')
+GEMINI_MODEL = "gemini-2.5-flash-image"  # Image generation model (Nano Banana)
 
 
 def load_image_from_file(file) -> genai.types.Part:
@@ -3310,7 +3310,7 @@ def load_image_from_file(file) -> genai.types.Part:
         # Open the image using PIL
         img = Image.open(file)
         
-        # Determine the correct MIME type (matching working code)
+        # Determine the correct MIME type
         img_format = img.format if img.format else 'PNG'
         mime_type = Image.MIME.get(img_format.upper()) or 'image/png'
         
@@ -3329,7 +3329,7 @@ def load_image_from_file(file) -> genai.types.Part:
         img_byte_arr = BytesIO()
         img.save(img_byte_arr, format=img_format)
         
-        # Create the Part object for the API request (matching working code)
+        # Create the Part object for the API request
         return genai.types.Part.from_bytes(
             data=img_byte_arr.getvalue(),
             mime_type=mime_type
@@ -3347,7 +3347,7 @@ def load_image_from_url(image_url: str) -> genai.types.Part:
         # Open the image using PIL
         img = Image.open(BytesIO(response.content))
         
-        # Determine the correct MIME type (matching working code)
+        # Determine the correct MIME type
         img_format = img.format if img.format else 'PNG'
         mime_type = Image.MIME.get(img_format.upper()) or 'image/png'
         
@@ -3366,7 +3366,7 @@ def load_image_from_url(image_url: str) -> genai.types.Part:
         img_byte_arr = BytesIO()
         img.save(img_byte_arr, format=img_format)
         
-        # Create the Part object for the API request (matching working code)
+        # Create the Part object for the API request
         return genai.types.Part.from_bytes(
             data=img_byte_arr.getvalue(),
             mime_type=mime_type
@@ -3445,15 +3445,18 @@ def virtual_try_on():
                 "error": f"Failed to process product image: {str(e)}"
             }), 400
         
-        # The instructional prompt: essential for combining the images (matching working code)
+        # The instructional prompt: explicitly request image generation
         prompt = (
-            """Take the T-shirt pattern/design from the second image and composite it onto the person in the first image, 
-as if the person is realistically wearing that T-shirt. Ensure correct texture, folds, and lighting. 
-The final image should only show the person wearing the new shirt.
+            """Generate an image showing the person from the first image wearing the T-shirt design from the second image.
 
-CRITICAL: The FIRST image is the PERSON - keep their face, body, pose, and background EXACTLY as they are. 
-Only replace the clothing they are wearing with the T-shirt design from the SECOND image. 
-Do NOT recreate or modify the person's image - use the exact person from the first image."""
+INSTRUCTIONS:
+1. The FIRST image shows a PERSON - preserve their face, body, pose, and background EXACTLY as shown
+2. The SECOND image shows a T-SHIRT/CLOTHING design
+3. Create a NEW IMAGE that shows the person wearing the T-shirt from the second image
+4. Ensure realistic texture, folds, lighting, and fit
+5. The output must be an IMAGE, not text description
+
+CRITICAL: You must OUTPUT AN IMAGE showing the person wearing the T-shirt. Do not describe it in text - generate the actual image."""
         )
         
         # The contents list must contain the two images and the instruction (matching working code)
@@ -3469,7 +3472,7 @@ Do NOT recreate or modify the person's image - use the exact person from the fir
         # Initialize Gemini client
         client = genai.Client(api_key=GEMINI_API_KEY)
         
-        # Call the API (matching working code - simple call, no config)
+        # Call the API (matching working code exactly)
         response = client.models.generate_content(
             model=GEMINI_MODEL,
             contents=contents,
