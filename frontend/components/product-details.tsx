@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Star } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { getProduct, addToCart, type Product } from "@/lib/api"
+import { getProduct, addToCart, getProductSizeChart, type Product, type SizeChartData } from "@/lib/api"
 import { TrialRoom } from "@/components/trial-room"
 
 interface ProductDetailsProps {
@@ -28,6 +28,8 @@ export function ProductDetails({ productId }: ProductDetailsProps) {
   const [addingToCart, setAddingToCart] = useState(false)
   const [selectedImageIndex, setSelectedImageIndex] = useState(0)
   const [sizeStocks, setSizeStocks] = useState<SizeStock[]>([])
+  const [sizeChartData, setSizeChartData] = useState<SizeChartData | null>(null)
+  const [loadingSizeChart, setLoadingSizeChart] = useState(false)
 
   useEffect(() => {
     async function fetchProduct() {
@@ -35,38 +37,66 @@ export function ProductDetails({ productId }: ProductDetailsProps) {
         setLoading(true)
         const response = await getProduct(productId)
         if (response.success && response.data) {
-          setProduct(response.data)
-          // Set default selections
-        } else {
-          console.error('Product not found:', response.error || response.message)
-          // Product will remain null, which will show "Product not found" message
-          if (response.data.color && response.data.color.length > 0) {
-            setSelectedColor(response.data.color[0])
+          const productData = response.data
+          setProduct(productData)
+          
+          // Set default color
+          if (productData.color && productData.color.length > 0) {
+            setSelectedColor(productData.color[0])
           }
-          if (response.data.size && response.data.size.length > 0) {
-            setSelectedSize(response.data.size[0])
+          
+          // Use size_stocks from API if available
+          if (productData.size_stocks && productData.size_stocks.length > 0) {
+            const stocks: SizeStock[] = productData.size_stocks.map((ss: any) => ({
+              size: ss.size_label,
+              stock: ss.stock || 0,
+              status: (ss.stock || 0) > 10 ? 'in_stock' : (ss.stock || 0) > 0 ? 'low_stock' : 'out_of_stock'
+            }))
+            setSizeStocks(stocks)
             
-            // Generate size stocks based on product stock
-            // In a real app, this would come from the API per size
-            const productData = response.data
-            const totalStock = productData.stock || 0
-            const sizeCount = productData.size?.length || 1
-            const stockPerSize = Math.floor(totalStock / sizeCount)
-            const stocks: SizeStock[] = (productData.size || []).map((size: string, index: number) => {
-              const sizeStock = index === 0 ? stockPerSize + (totalStock % sizeCount) : stockPerSize
-              return {
-                size,
-                stock: sizeStock,
-                status: sizeStock > 10 ? 'in_stock' : sizeStock > 0 ? 'low_stock' : 'out_of_stock'
-              }
-            })
+            // Set default size to first available size
+            const firstAvailableSize = stocks.find(s => s.status !== 'out_of_stock')
+            if (firstAvailableSize) {
+              setSelectedSize(firstAvailableSize.size)
+            } else if (stocks.length > 0) {
+              setSelectedSize(stocks[0].size)
+            }
+          } else if (productData.size && productData.size.length > 0) {
+            // Fallback to old size array if no size_stocks
+            setSelectedSize(productData.size[0])
+            const stocks: SizeStock[] = productData.size.map((size: string) => ({
+              size,
+              stock: 0,
+              status: 'out_of_stock' as const
+            }))
             setSizeStocks(stocks)
           }
+          
+          // Fetch size chart if product has a template
+          if (productData.size_chart_template_id) {
+            fetchSizeChart()
+          }
+        } else {
+          console.error('Product not found:', response.error || response.message)
         }
       } catch (error) {
         console.error('Failed to fetch product:', error)
       } finally {
         setLoading(false)
+      }
+    }
+    
+    async function fetchSizeChart() {
+      try {
+        setLoadingSizeChart(true)
+        const response = await getProductSizeChart(productId)
+        if (response.success && response.data) {
+          setSizeChartData(response.data)
+        }
+      } catch (error) {
+        console.error('Failed to fetch size chart:', error)
+      } finally {
+        setLoadingSizeChart(false)
       }
     }
     
@@ -90,7 +120,7 @@ export function ProductDetails({ productId }: ProductDetailsProps) {
       await addToCart({
         session_id: sessionId,
         product_id: product.id,
-        size: selectedSize,
+        size: hasSizeChart ? selectedSize : undefined, // Only include size if product has size chart
         color: selectedColor,
         quantity: quantity,
         price: product.price
@@ -144,7 +174,12 @@ export function ProductDetails({ productId }: ProductDetailsProps) {
     : [product.image_url || "/placeholder.svg"]
 
   const colors = product.color || []
-  const sizes = product.size || []
+  // Only show sizes if product has a size chart template
+  // Use sizes from size_stocks if available, otherwise fallback to product.size
+  const hasSizeChart = product.size_chart_template_id != null && product.size_chart_template_id !== undefined
+  const sizes = hasSizeChart 
+    ? (sizeStocks.length > 0 ? sizeStocks.map(s => s.size) : (product.size || []))
+    : []
   const rating = product.rating || 4.5
   const discountPercent = product.original_price && product.original_price > product.price
     ? Math.round((1 - product.price / product.original_price) * 100)
@@ -266,8 +301,8 @@ export function ProductDetails({ productId }: ProductDetailsProps) {
           </div>
         )}
 
-        {/* Size Chart Link */}
-        {sizes.length > 0 && (
+        {/* Size Chart Link - Only show if product has size chart */}
+        {hasSizeChart && sizeChartData && (
           <div className="mb-2">
             <Dialog>
               <DialogTrigger asChild>
@@ -276,61 +311,71 @@ export function ProductDetails({ productId }: ProductDetailsProps) {
                   Size Chart
                 </button>
               </DialogTrigger>
-              <DialogContent className="max-w-md">
+              <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2">
                     <Ruler className="w-5 h-5" />
-                    Size Chart
+                    {sizeChartData.template_name || 'Size Chart'}
                   </DialogTitle>
                 </DialogHeader>
                 <div className="py-4">
-                  <table className="w-full border-collapse">
-                    <thead>
-                      <tr className="bg-gray-100">
-                        <th className="border border-gray-200 px-4 py-2 text-left font-semibold">Size</th>
-                        <th className="border border-gray-200 px-4 py-2 text-left font-semibold">Chest (in)</th>
-                        <th className="border border-gray-200 px-4 py-2 text-left font-semibold">Waist (in)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td className="border border-gray-200 px-4 py-2 font-medium">S</td>
-                        <td className="border border-gray-200 px-4 py-2">34-36</td>
-                        <td className="border border-gray-200 px-4 py-2">28-30</td>
-                      </tr>
-                      <tr>
-                        <td className="border border-gray-200 px-4 py-2 font-medium">M</td>
-                        <td className="border border-gray-200 px-4 py-2">38-40</td>
-                        <td className="border border-gray-200 px-4 py-2">32-34</td>
-                      </tr>
-                      <tr>
-                        <td className="border border-gray-200 px-4 py-2 font-medium">L</td>
-                        <td className="border border-gray-200 px-4 py-2">42-44</td>
-                        <td className="border border-gray-200 px-4 py-2">36-38</td>
-                      </tr>
-                      <tr>
-                        <td className="border border-gray-200 px-4 py-2 font-medium">XL</td>
-                        <td className="border border-gray-200 px-4 py-2">46-48</td>
-                        <td className="border border-gray-200 px-4 py-2">40-42</td>
-                      </tr>
-                      <tr>
-                        <td className="border border-gray-200 px-4 py-2 font-medium">XXL</td>
-                        <td className="border border-gray-200 px-4 py-2">50-52</td>
-                        <td className="border border-gray-200 px-4 py-2">44-46</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  <p className="text-sm text-muted-foreground mt-4">
-                    * Measurements are in inches. For the best fit, measure your body and compare with the size chart.
-                  </p>
+                  {loadingSizeChart ? (
+                    <div className="text-center py-8">Loading size chart...</div>
+                  ) : sizeChartData.rows.length > 0 && sizeChartData.columns.length > 0 ? (
+                    <>
+                      <table className="w-full border-collapse">
+                        <thead>
+                          <tr className="bg-gray-100">
+                            <th className="border border-gray-200 px-4 py-2 text-left font-semibold">Size</th>
+                            {sizeChartData.columns.map((col) => (
+                              <th key={col.id} className="border border-gray-200 px-4 py-2 text-left font-semibold">
+                                {col.display_name} {col.unit && `(${col.unit})`}
+                              </th>
+                            ))}
+                            <th className="border border-gray-200 px-4 py-2 text-left font-semibold">Stock</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sizeChartData.rows.map((row) => {
+                            const stock = sizeChartData.size_stocks[row.size_label] || 0
+                            return (
+                              <tr key={row.id}>
+                                <td className="border border-gray-200 px-4 py-2 font-medium">{row.size_label}</td>
+                                {sizeChartData.columns.map((col) => {
+                                  const value = sizeChartData.values_grid[row.size_label]?.[col.column_key] || '-'
+                                  return (
+                                    <td key={col.id} className="border border-gray-200 px-4 py-2">
+                                      {value}
+                                    </td>
+                                  )
+                                })}
+                                <td className={`border border-gray-200 px-4 py-2 font-medium ${
+                                  stock > 10 ? 'text-green-600' : stock > 0 ? 'text-orange-500' : 'text-red-600'
+                                }`}>
+                                  {stock > 0 ? `${stock} available` : 'Out of stock'}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                      <p className="text-sm text-muted-foreground mt-4">
+                        * For the best fit, measure your body and compare with the size chart.
+                      </p>
+                    </>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No size chart data available
+                    </div>
+                  )}
                 </div>
               </DialogContent>
             </Dialog>
           </div>
         )}
 
-        {/* Size Selection */}
-        {sizes.length > 0 && (
+        {/* Size Selection - Only show if product has size chart */}
+        {hasSizeChart && sizes.length > 0 && (
           <div className="mb-4">
             <div className="flex items-center justify-between mb-3">
               <label className="text-sm font-semibold">Size:</label>
@@ -360,8 +405,8 @@ export function ProductDetails({ productId }: ProductDetailsProps) {
           </div>
         )}
 
-        {/* Stock Report for Selected Size */}
-        {selectedStock && (
+        {/* Stock Report for Selected Size - Only show if product has size chart */}
+        {hasSizeChart && selectedStock && (
           <div className="mb-6 p-4 rounded-lg bg-gray-50 border border-gray-200">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-gray-700">
@@ -407,14 +452,14 @@ export function ProductDetails({ productId }: ProductDetailsProps) {
           <Button 
             className="flex-1 bg-black text-white hover:bg-black/90 h-12"
             onClick={handleAddToCart}
-            disabled={addingToCart || (selectedStock?.status === 'out_of_stock')}
+            disabled={addingToCart || (hasSizeChart && selectedStock?.status === 'out_of_stock')}
           >
             {addingToCart ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 Adding...
               </>
-            ) : selectedStock?.status === 'out_of_stock' ? (
+            ) : (hasSizeChart && selectedStock?.status === 'out_of_stock') ? (
               'Out of Stock'
             ) : (
               'Add to Cart'

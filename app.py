@@ -255,15 +255,69 @@ def get_products_filtered():
 def get_product(product_id):
     """
     Get product details by ID
-    Returns: Product information including name, description, price, images
+    Returns: Product information including name, description, price, images, size_stocks
     """
     try:
         response = supabase.table('products').select('*').eq('id', product_id).eq('status', 'active').execute()
         
         if response.data and len(response.data) > 0:
+            product_data = response.data[0]
+            
+            # Fetch product size stock if product has size_chart_template_id
+            if product_data.get('size_chart_template_id'):
+                try:
+                    # Get product_sizes with stock - use a simpler query
+                    product_sizes_response = supabase.table('product_sizes')\
+                        .select('id, size_chart_row_id')\
+                        .eq('product_id', product_id)\
+                        .execute()
+                    
+                    # Format size stock data
+                    size_stocks = []
+                    if product_sizes_response.data:
+                        for ps in product_sizes_response.data:
+                            product_size_id = ps['id']
+                            row_id = ps['size_chart_row_id']
+                            
+                            # Get size label from size_chart_rows
+                            row_response = supabase.table('size_chart_rows')\
+                                .select('size_label')\
+                                .eq('id', row_id)\
+                                .execute()
+                            
+                            size_label = ''
+                            if row_response.data and len(row_response.data) > 0:
+                                size_label = row_response.data[0].get('size_label', '')
+                            
+                            # Get stock from product_size_stock
+                            stock_response = supabase.table('product_size_stock')\
+                                .select('stock_quantity')\
+                                .eq('product_size_id', product_size_id)\
+                                .execute()
+                            
+                            stock_value = 0
+                            if stock_response.data and len(stock_response.data) > 0:
+                                stock_value = stock_response.data[0].get('stock_quantity', 0)
+                            
+                            if size_label:  # Only add if we have a valid size label
+                                size_stocks.append({
+                                    'row_id': row_id,
+                                    'size_label': size_label,
+                                    'stock': stock_value
+                                })
+                    
+                    product_data['size_stocks'] = size_stocks
+                except Exception as e:
+                    print(f"Warning: Could not fetch size stocks: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    product_data['size_stocks'] = []
+            else:
+                product_data['size_stocks'] = []
+            
             return jsonify({
                 "success": True,
-                "data": response.data[0]
+                "data": product_data
             }), 200
         else:
             return jsonify({
@@ -276,6 +330,108 @@ def get_product(product_id):
             "success": False,
             "error": str(e)
         }), 500
+
+@app.route('/api/products/<product_id>/size-chart', methods=['GET'])
+def get_product_size_chart(product_id):
+    """
+    Get size chart for a product (public endpoint)
+    Returns: Size chart template with rows, columns, values, and stock for each size
+    """
+    try:
+        # Get product to find size_chart_template_id
+        product_response = supabase.table('products').select('size_chart_template_id').eq('id', product_id).eq('status', 'active').execute()
+        
+        if not product_response.data or len(product_response.data) == 0:
+            return jsonify({
+                "success": False,
+                "message": "Product not found"
+            }), 404
+        
+        template_id = product_response.data[0].get('size_chart_template_id')
+        if not template_id:
+            return jsonify({
+                "success": False,
+                "message": "Product does not have a size chart"
+            }), 404
+        
+        # Get template details
+        template_response = supabase.table('size_chart_templates').select('*').eq('id', template_id).execute()
+        if not template_response.data:
+            return jsonify({
+                "success": False,
+                "message": "Size chart template not found"
+            }), 404
+        
+        template = template_response.data[0]
+        rows_response = supabase.table('size_chart_rows').select('*').eq('template_id', template_id).order('sort_order').execute()
+        columns_response = supabase.table('size_chart_columns').select('*').eq('template_id', template_id).order('sort_order').execute()
+        
+        rows = rows_response.data or []
+        columns = columns_response.data or []
+        row_ids = [r['id'] for r in rows]
+        
+        # Get size chart values
+        values_grid = {}
+        if row_ids:
+            values_response = supabase.table('size_chart_values').select('*').in_('row_id', row_ids).execute()
+            row_map = {r['id']: r['size_label'] for r in rows}
+            col_map = {c['id']: c['column_key'] for c in columns}
+            for val in (values_response.data or []):
+                row_label = row_map.get(val['row_id'])
+                col_key = col_map.get(val['column_id'])
+                if row_label and col_key:
+                    if row_label not in values_grid:
+                        values_grid[row_label] = {}
+                    values_grid[row_label][col_key] = val['value']
+        
+        # Get stock for each size
+        size_stocks = {}
+        if row_ids:
+            product_sizes = supabase.table('product_sizes')\
+                .select('size_chart_row_id, size_chart_rows(size_label), product_size_stock(stock_quantity)')\
+                .eq('product_id', product_id)\
+                .execute()
+            
+            if product_sizes.data:
+                for ps in product_sizes.data:
+                    row = ps.get('size_chart_rows')
+                    stock_data = ps.get('product_size_stock')
+                    
+                    if isinstance(row, list) and len(row) > 0:
+                        row = row[0]
+                    elif not isinstance(row, dict):
+                        continue
+                    
+                    if row:
+                        size_label = row.get('size_label', '')
+                        stock_value = 0
+                        if stock_data:
+                            if isinstance(stock_data, list) and len(stock_data) > 0:
+                                stock_value = stock_data[0].get('stock_quantity', 0)
+                            elif isinstance(stock_data, dict):
+                                stock_value = stock_data.get('stock_quantity', 0)
+                        size_stocks[size_label] = stock_value
+        
+        # Format response
+        result = {
+            'template_name': template.get('name', ''),
+            'rows': rows,
+            'columns': columns,
+            'values_grid': values_grid,
+            'size_stocks': size_stocks
+        }
+        
+        return jsonify({
+            "success": True,
+            "data": result
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
 
 @app.route('/api/products/<product_id>/reviews', methods=['GET'])
 def get_product_reviews(product_id):
@@ -1159,6 +1315,90 @@ def get_new_arrivals():
             "error": str(e)
         }), 500
 
+@app.route('/api/products/best-selling', methods=['GET'])
+def get_best_selling_products():
+    """
+    Get top 4 best selling products by sales
+    Returns: Name, Rating (average), Image[2] (first 2 images), Price
+    """
+    try:
+        limit = request.args.get('limit', 4, type=int)
+        
+        # Get all order items to calculate sales
+        items_response = supabase.table('order_items').select('product_id, quantity').execute()
+        from collections import defaultdict
+        sales_count = defaultdict(int)
+        for item in (items_response.data or []):
+            sales_count[item['product_id']] += item.get('quantity', 1)
+        
+        # Get top selling product IDs
+        top_product_ids = [pid for pid, _ in sorted(sales_count.items(), key=lambda x: x[1], reverse=True)[:limit]]
+        
+        if not top_product_ids:
+            return jsonify({
+                "success": True,
+                "data": [],
+                "count": 0
+            }), 200
+        
+        # Get full product details for top sellers
+        products_response = supabase.table('products')\
+            .select('id, name, price, image_urls, color, tags')\
+            .eq('status', 'active')\
+            .in_('id', top_product_ids)\
+            .execute()
+        
+        # Create a map of product_id to product data
+        products_map = {p['id']: p for p in products_response.data}
+        
+        # Process products in sales order
+        products_list = []
+        for product_id in top_product_ids:
+            product = products_map.get(product_id)
+            if not product:
+                continue
+            
+            # Get average rating from reviews
+            reviews_response = supabase.table('reviews')\
+                .select('rating')\
+                .eq('product_id', product_id)\
+                .execute()
+            
+            ratings = [r['rating'] for r in reviews_response.data if r.get('rating')]
+            average_rating = round(sum(ratings) / len(ratings), 1) if ratings else 0.0
+            
+            # Get first 2 images
+            image_urls = product.get('image_urls', [])
+            if isinstance(image_urls, list):
+                images = image_urls[:2]  # First 2 images
+            else:
+                # Fallback to single image_url if image_urls is not available
+                single_image = product.get('image_url')
+                images = [single_image] if single_image else []
+                images = images[:2]
+            
+            products_list.append({
+                'id': product.get('id'),
+                'name': product.get('name', ''),
+                'rating': average_rating,
+                'image': images,  # Array of max 2 images
+                'price': float(product.get('price', 0)),
+                'sales': sales_count.get(product_id, 0)
+            })
+        
+        return jsonify({
+            "success": True,
+            "data": products_list,
+            "count": len(products_list)
+        }), 200
+            
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
 @app.route('/api/products/featured', methods=['GET'])
 def get_featured_products():
     """
@@ -1233,6 +1473,39 @@ def get_featured_products():
             "error": str(e)
         }), 500
 
+@app.route('/api/products/categories', methods=['GET'])
+def get_product_categories():
+    """
+    Get all distinct categories from active products
+    Returns: List of unique category names
+    """
+    try:
+        # Get all active products with their categories
+        response = supabase.table('products')\
+            .select('category')\
+            .eq('status', 'active')\
+            .execute()
+        
+        # Extract unique categories
+        categories = set()
+        for product in (response.data or []):
+            category = product.get('category')
+            if category:
+                categories.add(category)
+        
+        # Convert to sorted list
+        categories_list = sorted(list(categories))
+        
+        return jsonify({
+            "success": True,
+            "data": categories_list
+        }), 200
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
 @app.route('/api/products', methods=['GET'])
 def get_all_products():
     """
@@ -1264,19 +1537,19 @@ def get_all_products():
         query = supabase.table('products').select('id, name, price, image_urls, category, color, tags', count='exact')
         query = query.eq('status', 'active')  # Only show active products
         
-        # Apply filters (tag filter will be applied in Python)
+        # Apply filters (color and tag filters will be applied in Python for JSONB arrays)
         if category:
             query = query.eq('category', category)
         if min_price is not None:
             query = query.gte('price', min_price)
         if max_price is not None:
             query = query.lte('price', max_price)
-        if color:
-            query = query.eq('color', color)
-        
+        # Color filter: check if color array contains the specified color
+        # For JSONB arrays, we'll filter in Python after fetching
+        color_filter_applied = color is not None
         tag_filter_applied = tag is not None
         
-        # Get total count with filters (tag filter will be recalculated)
+        # Get total count with filters (color and tag filters will be recalculated)
         count_query = supabase.table('products').select('id', count='exact')
         count_query = count_query.eq('status', 'active')  # Only count active products
         if category:
@@ -1285,16 +1558,56 @@ def get_all_products():
             count_query = count_query.gte('price', min_price)
         if max_price is not None:
             count_query = count_query.lte('price', max_price)
-        if color:
-            count_query = count_query.eq('color', color)
+        # Note: color filter will be applied in Python
         
-        # Get paginated data (fetch more if tag filter is applied)
-        fetch_limit = limit * 3 if tag_filter_applied else limit
-        response = query.range(offset, offset + fetch_limit).order('created_at', desc=True).execute()
+        # Get paginated data (fetch more if filters are applied to filter in Python)
+        fetch_limit = limit * 3 if (color_filter_applied or tag_filter_applied) else limit
+        
+        # Apply sorting
+        sort_param = request.args.get('sort', 'newest')
+        if sort_param == 'price_high_low':
+            query = query.order('price', desc=True)
+        elif sort_param == 'price_low_high':
+            query = query.order('price', desc=False)
+        elif sort_param == 'newest':
+            query = query.order('created_at', desc=True)
+        elif sort_param == 'oldest':
+            query = query.order('created_at', desc=False)
+        elif sort_param == 'best_selling':
+            # For best selling, we'll sort by created_at first, then sort by sales in Python
+            query = query.order('created_at', desc=True)
+        else:
+            # Default to newest
+            query = query.order('created_at', desc=True)
+        
+        response = query.range(offset, offset + fetch_limit).execute()
+        
+        # Get sales data for best_selling sort
+        sales_data = {}
+        if sort_param == 'best_selling':
+            items_response = supabase.table('order_items').select('product_id, quantity').execute()
+            from collections import defaultdict
+            sales_count = defaultdict(int)
+            for item in (items_response.data or []):
+                sales_count[item['product_id']] += item.get('quantity', 1)
+            sales_data = dict(sales_count)
         
         # Process products to include ratings and format images
         products_list = []
         for product in response.data:
+            # Apply color filter if specified
+            if color_filter_applied:
+                product_colors = product.get('color', [])
+                if isinstance(product_colors, list):
+                    # Check if the specified color exists in the array (case-insensitive)
+                    if color.lower() not in [c.lower() if isinstance(c, str) else str(c).lower() for c in product_colors]:
+                        continue
+                elif isinstance(product_colors, str):
+                    if product_colors.lower() != color.lower():
+                        continue
+                else:
+                    continue
+            
             # Apply tag filter if specified
             if tag_filter_applied:
                 product_tags = product.get('tags', [])
@@ -1326,34 +1639,74 @@ def get_all_products():
                 single_image = product.get('image_url')
                 images = [single_image] if single_image else []
             
-            products_list.append({
+            product_data = {
                 'id': product.get('id'),  # Include product ID
                 'name': product.get('name', ''),
                 'rating': average_rating,
                 'image': images,  # Array of max 2 images
                 'price': float(product.get('price', 0))
-            })
+            }
             
-            # Stop if we have enough items
-            if len(products_list) >= limit:
+            # Add sales count for best_selling sort
+            if sort_param == 'best_selling':
+                product_data['_sales_count'] = sales_data.get(product.get('id'), 0)
+            
+            products_list.append(product_data)
+            
+            # Stop if we have enough items (but not for best_selling, we need to sort first)
+            if sort_param != 'best_selling' and len(products_list) >= limit:
                 break
         
-        # Recalculate total count if tag filter is applied
-        if tag_filter_applied:
-            all_products = supabase.table('products').select('id, tags').execute()
+        # Sort by sales if best_selling
+        if sort_param == 'best_selling':
+            products_list.sort(key=lambda x: x.get('_sales_count', 0), reverse=True)
+            # Remove the temporary _sales_count field
+            for p in products_list:
+                p.pop('_sales_count', None)
+            # Take only the requested limit
+            products_list = products_list[:limit]
+        
+        # Recalculate total count if tag or color filter is applied
+        if tag_filter_applied or color_filter_applied:
+            all_products = supabase.table('products').select('id, tags, color, price, category').eq('status', 'active').execute()
             filtered_count = 0
             for p in all_products.data:
-                # Apply all filters except tag
+                # Apply category filter
                 if category and p.get('category') != category:
                     continue
-                # Note: We need to fetch full product data to check price and color filters
-                # For now, let's use a simpler approach - get all matching products and filter by tag
-                p_tags = p.get('tags', [])
-                if isinstance(p_tags, list):
-                    if tag.lower() in [t.lower() if isinstance(t, str) else str(t).lower() for t in p_tags]:
-                        filtered_count += 1
-                elif isinstance(p_tags, str) and p_tags.lower() == tag.lower():
-                    filtered_count += 1
+                
+                # Apply price filters
+                product_price = float(p.get('price', 0))
+                if min_price is not None and product_price < min_price:
+                    continue
+                if max_price is not None and product_price > max_price:
+                    continue
+                
+                # Apply color filter
+                if color_filter_applied:
+                    p_colors = p.get('color', [])
+                    if isinstance(p_colors, list):
+                        if color.lower() not in [c.lower() if isinstance(c, str) else str(c).lower() for c in p_colors]:
+                            continue
+                    elif isinstance(p_colors, str):
+                        if p_colors.lower() != color.lower():
+                            continue
+                    else:
+                        continue
+                
+                # Apply tag filter
+                if tag_filter_applied:
+                    p_tags = p.get('tags', [])
+                    if isinstance(p_tags, list):
+                        if tag.lower() not in [t.lower() if isinstance(t, str) else str(t).lower() for t in p_tags]:
+                            continue
+                    elif isinstance(p_tags, str):
+                        if p_tags.lower() != tag.lower():
+                            continue
+                    else:
+                        continue
+                
+                filtered_count += 1
             total_count = filtered_count
         else:
             # Get count from the query response
@@ -2163,46 +2516,54 @@ def admin_product_detail(product_id):
             # Fetch product size stock if product has size_chart_template_id
             if product_data.get('size_chart_template_id'):
                 try:
-                    # Get product_sizes with stock
-                    product_sizes = supabase.table('product_sizes')\
-                        .select('id, size_chart_row_id, size_chart_rows(size_label), product_size_stock(stock_quantity)')\
+                    # Get product_sizes with stock - use a simpler query
+                    product_sizes_response = supabase.table('product_sizes')\
+                        .select('id, size_chart_row_id')\
                         .eq('product_id', product_id)\
                         .execute()
                     
                     # Format size stock data
                     size_stocks = []
-                    if product_sizes.data:
-                        for ps in product_sizes.data:
-                            row = ps.get('size_chart_rows')
-                            stock_data = ps.get('product_size_stock')
+                    if product_sizes_response.data:
+                        for ps in product_sizes_response.data:
+                            product_size_id = ps['id']
+                            row_id = ps['size_chart_row_id']
                             
-                            # Handle nested structure (could be dict or list)
-                            if isinstance(row, list) and len(row) > 0:
-                                row = row[0]
-                            elif isinstance(row, dict):
-                                pass  # Already a dict
-                            else:
-                                continue
+                            # Get size label from size_chart_rows
+                            row_response = supabase.table('size_chart_rows')\
+                                .select('size_label')\
+                                .eq('id', row_id)\
+                                .execute()
                             
-                            if row:
-                                # Get stock value (column is stock_quantity, not stock)
-                                stock_value = 0
-                                if stock_data:
-                                    if isinstance(stock_data, list) and len(stock_data) > 0:
-                                        stock_value = stock_data[0].get('stock_quantity', 0)
-                                    elif isinstance(stock_data, dict):
-                                        stock_value = stock_data.get('stock_quantity', 0)
-                                
+                            size_label = ''
+                            if row_response.data and len(row_response.data) > 0:
+                                size_label = row_response.data[0].get('size_label', '')
+                            
+                            # Get stock from product_size_stock
+                            stock_response = supabase.table('product_size_stock')\
+                                .select('stock_quantity')\
+                                .eq('product_size_id', product_size_id)\
+                                .execute()
+                            
+                            stock_value = 0
+                            if stock_response.data and len(stock_response.data) > 0:
+                                stock_value = stock_response.data[0].get('stock_quantity', 0)
+                            
+                            if size_label:  # Only add if we have a valid size label
                                 size_stocks.append({
-                                    'row_id': ps['size_chart_row_id'],
-                                    'size_label': row.get('size_label', '') if isinstance(row, dict) else '',
+                                    'row_id': row_id,
+                                    'size_label': size_label,
                                     'stock': stock_value
                                 })
                     
                     product_data['size_stocks'] = size_stocks
                 except Exception as e:
                     print(f"Warning: Could not fetch size stocks: {e}")
+                    import traceback
+                    traceback.print_exc()
                     product_data['size_stocks'] = []
+            else:
+                product_data['size_stocks'] = []
             
             return jsonify({"success": True, "data": product_data}), 200
         
@@ -2940,49 +3301,72 @@ def admin_delete_image():
 
 # Gemini API Configuration
 GEMINI_API_KEY = os.getenv('GEMINI_IMAGE_API', 'AIzaSyD0kTCHESelVNPQFQg7gyYJca9_cZdOMQo')
-GEMINI_MODEL = "gemini-2.0-flash-exp"  # Image generation model
+GEMINI_MODEL = "gemini-2.5-flash-image"  # Image generation model (same as working code)
 
 
 def load_image_from_file(file) -> genai.types.Part:
-    """Loads an uploaded file and converts it into a GenAI Part object."""
+    """Loads an uploaded file and converts it into a GenAI Part object (matching working code)."""
     try:
+        # Open the image using PIL
         img = Image.open(file)
+        
+        # Determine the correct MIME type (matching working code)
         img_format = img.format if img.format else 'PNG'
         mime_type = Image.MIME.get(img_format.upper()) or 'image/png'
         
+        # Handle WebP conversion (PIL may not support saving WebP)
+        if img_format == 'WEBP':
+            if img.mode in ('RGBA', 'LA', 'P'):
+                img = img.convert('RGBA')
+                img_format = 'PNG'
+                mime_type = 'image/png'
+            else:
+                img = img.convert('RGB')
+                img_format = 'JPEG'
+                mime_type = 'image/jpeg'
+        
+        # Save the image data into a BytesIO buffer
         img_byte_arr = BytesIO()
-        # Convert to RGB if necessary (for JPEG compatibility)
-        if img.mode in ('RGBA', 'P'):
-            img = img.convert('RGB')
-            img_format = 'JPEG'
-            mime_type = 'image/jpeg'
         img.save(img_byte_arr, format=img_format)
         
+        # Create the Part object for the API request (matching working code)
         return genai.types.Part.from_bytes(
             data=img_byte_arr.getvalue(),
             mime_type=mime_type
         )
     except Exception as e:
-        raise Exception(f"Error processing image: {e}")
+        raise Exception(f"Error loading image: {e}")
 
 
 def load_image_from_url(image_url: str) -> genai.types.Part:
-    """Loads an image from URL and converts it into a GenAI Part object."""
+    """Loads an image from URL and converts it into a GenAI Part object (matching working code)."""
     try:
         response = requests.get(image_url, timeout=10)
         response.raise_for_status()
         
+        # Open the image using PIL
         img = Image.open(BytesIO(response.content))
+        
+        # Determine the correct MIME type (matching working code)
         img_format = img.format if img.format else 'PNG'
         mime_type = Image.MIME.get(img_format.upper()) or 'image/png'
         
+        # Handle WebP conversion (PIL may not support saving WebP)
+        if img_format == 'WEBP':
+            if img.mode in ('RGBA', 'LA', 'P'):
+                img = img.convert('RGBA')
+                img_format = 'PNG'
+                mime_type = 'image/png'
+            else:
+                img = img.convert('RGB')
+                img_format = 'JPEG'
+                mime_type = 'image/jpeg'
+        
+        # Save the image data into a BytesIO buffer
         img_byte_arr = BytesIO()
-        if img.mode in ('RGBA', 'P'):
-            img = img.convert('RGB')
-            img_format = 'JPEG'
-            mime_type = 'image/jpeg'
         img.save(img_byte_arr, format=img_format)
         
+        # Create the Part object for the API request (matching working code)
         return genai.types.Part.from_bytes(
             data=img_byte_arr.getvalue(),
             mime_type=mime_type
@@ -3038,65 +3422,84 @@ def virtual_try_on():
             }), 400
         
         # Load images as GenAI Parts
-        person_part = load_image_from_file(person_file)
+        try:
+            person_part = load_image_from_file(person_file)
+            print(f"[Virtual Try-On] Person image loaded successfully, MIME: {person_part.mime_type if hasattr(person_part, 'mime_type') else 'N/A'}")
+        except Exception as e:
+            return jsonify({
+                "success": False,
+                "error": f"Failed to process person image: {str(e)}"
+            }), 400
         
-        if product_image_url:
-            product_part = load_image_from_url(product_image_url)
-        else:
-            product_part = load_image_from_file(product_file)
+        try:
+            if product_image_url:
+                product_part = load_image_from_url(product_image_url)
+                print(f"[Virtual Try-On] Product image loaded from URL: {product_image_url}")
+            else:
+                product_part = load_image_from_file(product_file)
+                print(f"[Virtual Try-On] Product image loaded from file")
+            print(f"[Virtual Try-On] Product image loaded successfully, MIME: {product_part.mime_type if hasattr(product_part, 'mime_type') else 'N/A'}")
+        except Exception as e:
+            return jsonify({
+                "success": False,
+                "error": f"Failed to process product image: {str(e)}"
+            }), 400
         
-        # Create the prompt for virtual try-on
-        # IMPORTANT: First image is the PERSON (keep unchanged), Second image is the CLOTHING (extract design)
-        prompt = """Take the T-shirt pattern/design from the second image and composite it onto the person in the first image, 
+        # The instructional prompt: essential for combining the images (matching working code)
+        prompt = (
+            """Take the T-shirt pattern/design from the second image and composite it onto the person in the first image, 
 as if the person is realistically wearing that T-shirt. Ensure correct texture, folds, and lighting. 
 The final image should only show the person wearing the new shirt.
 
 CRITICAL: The FIRST image is the PERSON - keep their face, body, pose, and background EXACTLY as they are. 
 Only replace the clothing they are wearing with the T-shirt design from the SECOND image. 
 Do NOT recreate or modify the person's image - use the exact person from the first image."""
+        )
         
-        # Build the content list - ORDER IS CRITICAL: Person first, Product second
+        # The contents list must contain the two images and the instruction (matching working code)
         contents = [
-            person_part,   # Image 1: The person (DO NOT MODIFY)
-            product_part,  # Image 2: The clothing item (EXTRACT DESIGN FROM THIS)
+            person_part,   # Image 1 (The Model)
+            product_part,  # Image 2 (The T-shirt)
             prompt         # The instruction
         ]
+        
+        print(f"[Virtual Try-On] Images loaded successfully")
+        print(f"[Virtual Try-On] Sending request to {GEMINI_MODEL}...")
         
         # Initialize Gemini client
         client = genai.Client(api_key=GEMINI_API_KEY)
         
-        # Generate the image
+        # Call the API (matching working code - simple call, no config)
         response = client.models.generate_content(
             model=GEMINI_MODEL,
             contents=contents,
-            config=genai.types.GenerateContentConfig(
-                response_modalities=['image', 'text']
-            )
         )
         
-        # Extract the generated image
+        # Process the response to find the image data (matching working code)
         image_part = None
-        if response.candidates and response.candidates[0].content.parts:
+        if (response.candidates and
+                response.candidates[0].content.parts):
             for part in response.candidates[0].content.parts:
-                if hasattr(part, 'inline_data') and part.inline_data:
+                if part.inline_data:
                     image_part = part.inline_data
                     break
         
         if not image_part:
-            # Check if there's a text response (error message)
+            print("\n[Virtual Try-On] FAILURE: Image generation failed or no image data was found.")
             text_response = ""
-            if response.text:
+            if hasattr(response, 'text') and response.text:
                 text_response = response.text
+                print(f"[Virtual Try-On] Model response text: {text_response[:200]}")
             return jsonify({
                 "success": False, 
                 "error": "Failed to generate try-on image. The AI model could not process the images.",
                 "details": text_response[:500] if text_response else "No additional details"
             }), 500
         
-        # Convert to base64 for frontend display
+        # Extract image bytes (matching working code)
         image_bytes = image_part.data
         base64_image = base64.b64encode(image_bytes).decode('utf-8')
-        mime_type = image_part.mime_type or 'image/png'
+        mime_type = getattr(image_part, 'mime_type', 'image/png') or 'image/png'
         
         return jsonify({
             "success": True,

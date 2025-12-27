@@ -4,22 +4,22 @@ import { useEffect, useState } from "react"
 import { ProductCard } from "@/components/product-card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { getTopSelling, type Product } from "@/lib/api"
+import { getBestSelling, type Product } from "@/lib/api"
 import Link from "next/link"
 
-export function TopSelling() {
+export function BestSeller() {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function fetchProducts() {
       try {
-        const response = await getTopSelling()
+        const response = await getBestSelling()
         if (response.success && response.data) {
           setProducts(response.data)
         }
       } catch (error) {
-        console.error('Failed to fetch top selling:', error)
+        console.error('Failed to fetch best selling:', error)
       } finally {
         setLoading(false)
       }
@@ -37,9 +37,9 @@ export function TopSelling() {
   })
 
   return (
-    <section className="py-16 lg:py-24 bg-accent">
+    <section className="py-16 lg:py-24">
       <div className="container mx-auto px-4">
-        <h2 className="text-4xl lg:text-5xl font-bold text-center mb-12">TOP SELLING</h2>
+        <h2 className="text-4xl lg:text-5xl font-bold text-center mb-12">BEST SELLER</h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {loading ? (
@@ -58,13 +58,13 @@ export function TopSelling() {
             ))
           ) : (
             <div className="col-span-4 text-center py-8 text-muted-foreground">
-              No top selling products at the moment
+              No best seller products at the moment
             </div>
           )}
         </div>
 
         <div className="flex justify-center mt-12">
-          <Link href="/products?tag=Top Selling&sort=best_selling">
+          <Link href="/products?sort=best_selling">
             <Button variant="outline" size="lg" className="rounded-full px-12 bg-transparent">
               View All
             </Button>
@@ -74,3 +74,5 @@ export function TopSelling() {
     </section>
   )
 }
+
+

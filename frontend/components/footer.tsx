@@ -1,29 +1,14 @@
 import { Facebook, Twitter, Instagram, Github } from "lucide-react"
-import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 
 export function Footer() {
   return (
     <footer className="bg-accent py-16">
       <div className="container mx-auto px-4">
-        {/* Newsletter */}
-        <div className="bg-black text-white rounded-2xl p-8 lg:p-12 mb-16 flex flex-col lg:flex-row items-center justify-between gap-8">
-          <h3 className="text-3xl lg:text-4xl font-bold max-w-lg">STAY UPTO DATE ABOUT OUR LATEST OFFERS</h3>
-          <div className="w-full lg:w-auto space-y-4">
-            <Input
-              placeholder="Enter your email address"
-              className="bg-white text-black rounded-full px-6 py-6 min-w-[300px]"
-            />
-            <Button className="w-full rounded-full px-6 py-6 bg-white text-black hover:bg-white/90">
-              Subscribe to Newsletter
-            </Button>
-          </div>
-        </div>
-
         {/* Footer Links */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-8 mb-12">
           <div>
-            <h2 className="text-2xl font-bold mb-4">TAAGA WOMEN</h2>
+            <h2 className="text-2xl font-bold mb-4">VELORA</h2>
             <p className="text-sm text-muted-foreground mb-6">
               We have clothes that suits your style and which you're proud to wear. From women to men.
             </p>

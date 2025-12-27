@@ -32,7 +32,7 @@ export function NewArrivals() {
     name: product.name,
     price: product.price,
     originalPrice: product.original_price || null,
-    image: product.image_urls?.[0] || product.image_url || "/placeholder.svg",
+    image: product.image?.[0] || product.image_urls?.[0] || product.image_url || "/placeholder.svg",
     rating: product.rating || 4.5,
   })
 
@@ -64,7 +64,7 @@ export function NewArrivals() {
         </div>
 
         <div className="flex justify-center mt-12">
-          <Link href="/products">
+          <Link href="/products?tag=New Arrival">
             <Button variant="outline" size="lg" className="rounded-full px-12 bg-transparent">
               View All
             </Button>
