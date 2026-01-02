@@ -110,23 +110,40 @@ def admin_size_chart_add_row(template_id):
             max_sort_order = existing_rows.data[0]['sort_order'] if existing_rows.data and len(existing_rows.data) > 0 else -1
             sort_order = max_sort_order + 1
         else:
-            sort_order = int(sort_order)
+            try:
+                sort_order = int(sort_order)
+            except (ValueError, TypeError):
+                sort_order = 0
         
-        response = supabase.table('size_chart_rows').insert({
+        # Prepare insert data
+        insert_data = {
             'template_id': template_id,
             'size_label': size_label.strip(),
-            'sort_order': int(sort_order)
-        }).execute()
+            'sort_order': sort_order
+        }
+        
+        print(f"Attempting to insert size chart row: {insert_data}")  # Debug log
+        
+        response = supabase.table('size_chart_rows').insert(insert_data).execute()
         
         if not response.data:
-            return jsonify({"success": False, "error": "Failed to create row"}), 500
+            error_msg = "Failed to create row - no data returned"
+            print(f"Error: {error_msg}")
+            return jsonify({"success": False, "error": error_msg}), 500
         
         return jsonify({"success": True, "data": response.data[0]}), 201
     except Exception as e:
         import traceback
         error_trace = traceback.format_exc()
+        error_msg = str(e)
         print(f"Error adding size chart row: {error_trace}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        print(f"Error message: {error_msg}")
+        # Return more detailed error in response
+        return jsonify({
+            "success": False, 
+            "error": error_msg,
+            "details": error_trace if 'debug' in request.args else None
+        }), 500
 
 
 @bp.route('/templates/<int:template_id>/rows/<int:row_id>', methods=['DELETE'])
