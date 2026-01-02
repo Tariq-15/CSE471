@@ -35,7 +35,7 @@ export function ProductDetail() {
   
   // Size Chart Template State
   const [templates, setTemplates] = useState<SizeChartTemplate[]>([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("none");
   const [sizeStocks, setSizeStocks] = useState<SizeStock[]>([]);
   const [loadingTemplate, setLoadingTemplate] = useState(false);
 
@@ -97,13 +97,16 @@ export function ProductDetail() {
             // Fetch template details to initialize sizes
             fetchTemplateDetails(response.data.size_chart_template_id);
           }
-        } else if (response.data.size && response.data.size.length > 0) {
-          // Initialize sizes from product's existing sizes (legacy)
-          setSizeStocks(response.data.size.map((s, i) => ({
-            size_label: s,
-            stock: response.data?.stock || 0,
-            row_id: i
-          })));
+        } else {
+          setSelectedTemplateId("none");
+          if (response.data.size && Array.isArray(response.data.size) && response.data.size.length > 0) {
+            // Initialize sizes from product's existing sizes (legacy)
+            setSizeStocks(response.data.size.map((s: any, i: number) => ({
+              size_label: s,
+              stock: response.data?.stock || 0,
+              row_id: i
+            })));
+          }
         }
       }
     } catch (error) {
@@ -160,7 +163,7 @@ export function ProductDetail() {
 
   const handleTemplateChange = (templateId: string) => {
     setSelectedTemplateId(templateId);
-    if (templateId) {
+    if (templateId && templateId !== "none") {
       fetchTemplateDetails(parseInt(templateId));
     } else {
       setSizeStocks([]);
@@ -189,13 +192,13 @@ export function ProductDetail() {
         ...formData,
         stock: totalStock,
         size: sizeStocks.map(s => s.size_label),
-        size_chart_template_id: selectedTemplateId ? parseInt(selectedTemplateId) : null,
+        size_chart_template_id: selectedTemplateId && selectedTemplateId !== "none" ? parseInt(selectedTemplateId) : null,
         image_url: productImages[0] || null,
         image_urls: productImages
       };
       
       // Add size_stocks array if template is selected
-      if (selectedTemplateId && sizeStocks.length > 0) {
+      if (selectedTemplateId && selectedTemplateId !== "none" && sizeStocks.length > 0) {
         updateData.size_stocks = sizeStocks.map(s => ({
           row_id: s.row_id,
           stock: s.stock
@@ -457,7 +460,7 @@ export function ProductDetail() {
                 <Label htmlFor="size-template" className="text-base font-semibold">Select Size Chart Template</Label>
                 <p className="text-sm text-gray-500 mb-2">Choose a template to auto-populate available sizes</p>
                 <Select 
-                  value={selectedTemplateId}
+                  value={selectedTemplateId || "none"}
                   onValueChange={handleTemplateChange}
                   disabled={!isEditing}
                 >
@@ -465,7 +468,7 @@ export function ProductDetail() {
                     <SelectValue placeholder="Select a size chart template" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">No Template (Custom Sizes)</SelectItem>
+                    <SelectItem value="none">No Template (Custom Sizes)</SelectItem>
                     {templates.map(template => (
                       <SelectItem key={template.id} value={String(template.id)}>
                         {template.name}
