@@ -44,7 +44,7 @@ export function SizeChartManagement() {
   const [newRowLabel, setNewRowLabel] = useState("");
   const [newColumnKey, setNewColumnKey] = useState("");
   const [newColumnName, setNewColumnName] = useState("");
-  const [newColumnUnit, setNewColumnUnit] = useState("cm");
+  const [newColumnUnit, setNewColumnUnit] = useState("in");
 
   useEffect(() => {
     fetchTemplates();
@@ -194,7 +194,7 @@ export function SizeChartManagement() {
       if (response.success) {
         setNewColumnKey("");
         setNewColumnName("");
-        setNewColumnUnit("cm");
+        setNewColumnUnit("in");
         // Refresh template to show new column
         try {
           const refreshed = await getSizeChartTemplate(selectedTemplate.id);
