@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Routes, Route, useLocation, Navigate } from "react-router-dom";
 import { DashboardSidebar } from "./components/DashboardSidebar";
 import { DashboardTopbar } from "./components/DashboardTopbar";
 import { DashboardOverview } from "./components/DashboardOverview";
@@ -15,80 +16,61 @@ import { StockManagement } from "./components/StockManagement";
 import { DiscountsManagement } from "./components/DiscountsManagement";
 import { NotificationsManagement } from "./components/NotificationsManagement";
 import { UserSettings } from "./components/UserSettings";
+import { SizeChartManagement } from "./components/SizeChartManagement";
 
 export default function App() {
-  const [activeSection, setActiveSection] = useState("dashboard");
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
-  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
-  const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
-  const [selectedSupplierId, setSelectedSupplierId] = useState<number | null>(null);
+  const location = useLocation();
 
-  // Error boundary for debugging
-  if (typeof window !== 'undefined') {
-    window.addEventListener('error', (event) => {
-      console.error('Global error:', event.error);
-    });
-    window.addEventListener('unhandledrejection', (event) => {
-      console.error('Unhandled promise rejection:', event.reason);
-    });
-  }
-
-  const renderSection = () => {
-    switch (activeSection) {
-      case "dashboard":
-        return <DashboardOverview />;
-      case "products":
-        if (selectedProductId) {
-          return <ProductDetail productId={selectedProductId} onBack={() => setSelectedProductId(null)} />;
-        }
-        return <ProductsManagement onViewProduct={setSelectedProductId} />;
-      case "orders":
-        if (selectedOrderId) {
-          return <OrderDetail orderId={selectedOrderId} onBack={() => setSelectedOrderId(null)} />;
-        }
-        return <OrdersManagement onViewOrder={setSelectedOrderId} />;
-      case "customers":
-        if (selectedCustomerId) {
-          return <CustomerDetail customerId={selectedCustomerId} onBack={() => setSelectedCustomerId(null)} />;
-        }
-        return <CustomersManagement onViewCustomer={setSelectedCustomerId} />;
-      case "suppliers":
-        if (selectedSupplierId) {
-          return <SupplierDetail supplierId={selectedSupplierId} onBack={() => setSelectedSupplierId(null)} />;
-        }
-        return <SuppliersManagement onViewSupplier={setSelectedSupplierId} />;
-      case "analytics":
-        return <Analytics />;
-      case "stock":
-        return <StockManagement />;
-      case "discounts":
-        return <DiscountsManagement />;
-      case "notifications":
-        return <NotificationsManagement />;
-      case "settings":
-        return <UserSettings />;
-      default:
-        return <DashboardOverview />;
-    }
+  // Get the current section from the pathname
+  const getActiveSection = () => {
+    const path = location.pathname;
+    if (path === '/' || path === '/dashboard') return 'dashboard';
+    if (path.startsWith('/products')) return 'products';
+    if (path.startsWith('/orders')) return 'orders';
+    if (path.startsWith('/customers')) return 'customers';
+    if (path.startsWith('/suppliers')) return 'suppliers';
+    if (path.startsWith('/analytics')) return 'analytics';
+    if (path.startsWith('/stock')) return 'stock';
+    if (path.startsWith('/discounts')) return 'discounts';
+    if (path.startsWith('/sizecharts')) return 'sizecharts';
+    if (path.startsWith('/notifications')) return 'notifications';
+    if (path.startsWith('/settings')) return 'settings';
+    return 'dashboard';
   };
 
   return (
     <div className="min-h-screen bg-white flex">
       <DashboardSidebar
-        activeSection={activeSection}
-        onSectionChange={setActiveSection}
+        activeSection={getActiveSection()}
         isCollapsed={isSidebarCollapsed}
       />
       <div className="flex-1 flex flex-col">
         <DashboardTopbar
           onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-          onSectionChange={setActiveSection}
         />
         <main className={`flex-1 overflow-auto transition-all duration-300 ${
           isSidebarCollapsed ? 'ml-0' : 'ml-0'
         }`}>
-          {renderSection()}
+          <Routes>
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={<DashboardOverview />} />
+            <Route path="/products" element={<ProductsManagement />} />
+            <Route path="/products/:id" element={<ProductDetail />} />
+            <Route path="/orders" element={<OrdersManagement />} />
+            <Route path="/orders/:id" element={<OrderDetail />} />
+            <Route path="/customers" element={<CustomersManagement />} />
+            <Route path="/customers/:id" element={<CustomerDetail />} />
+            <Route path="/suppliers" element={<SuppliersManagement />} />
+            <Route path="/suppliers/:id" element={<SupplierDetail />} />
+            <Route path="/analytics" element={<Analytics />} />
+            <Route path="/stock" element={<StockManagement />} />
+            <Route path="/discounts" element={<DiscountsManagement />} />
+            <Route path="/sizecharts" element={<SizeChartManagement />} />
+            <Route path="/notifications" element={<NotificationsManagement />} />
+            <Route path="/settings" element={<UserSettings />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Routes>
         </main>
       </div>
     </div>

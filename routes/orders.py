@@ -125,7 +125,8 @@ def create_order():
             'discount': round(float(discount), 2),
             'delivery_fee': round(float(delivery_fee), 2),
             'total': round(float(total), 2),
-            'status': 'pending'
+            'status': 'pending',
+            'payment_method': 'Cash on Delivery'
         }
         if user_id:
             order_data['user_id'] = user_id

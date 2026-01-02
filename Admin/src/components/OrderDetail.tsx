@@ -1,17 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Separator } from "./ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { ArrowLeft, Package, Truck, CheckCircle, XCircle, Clock, User, MapPin, CreditCard } from "lucide-react";
+import { ArrowLeft, Package, Truck, CheckCircle, XCircle, Clock, User, MapPin, CreditCard, Loader2 } from "lucide-react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
-
-interface OrderDetailProps {
-  orderId: string;
-  onBack: () => void;
-}
+import { getOrder, updateOrderStatus } from "@/lib/api";
 
 const mockOrder = {
   id: "ORD-001",
@@ -101,9 +98,90 @@ const mockOrder = {
   ]
 };
 
-export function OrderDetail({ orderId, onBack }: OrderDetailProps) {
-  const [order, setOrder] = useState(mockOrder);
-  const [newStatus, setNewStatus] = useState(order.status);
+interface OrderItem {
+  id: string;
+  product_id?: string;
+  product_name: string;
+  product_image?: string;
+  size?: string;
+  color?: string;
+  quantity: number;
+  price: number;
+}
+
+interface OrderData {
+  id: string;
+  order_number?: string;
+  status: string;
+  created_at: string;
+  subtotal: number;
+  discount: number;
+  delivery_fee: number;
+  total: number;
+  payment_method?: string;
+  customers?: {
+    full_name?: string;
+    email?: string;
+    phone_number?: string;
+    district?: string;
+    thana?: string;
+    full_address?: string;
+  };
+  order_items?: OrderItem[];
+}
+
+export function OrderDetail() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const orderId = id || '';
+
+  const onBack = () => {
+    navigate('/orders');
+  };
+  
+  const [order, setOrder] = useState<OrderData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [newStatus, setNewStatus] = useState<string>('');
+
+  useEffect(() => {
+    if (orderId) {
+      fetchOrder();
+    }
+  }, [orderId]);
+
+  const fetchOrder = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await getOrder(orderId);
+      
+      if (response.success && response.data) {
+        const orderData = response.data as any;
+        setOrder({
+          id: orderData.id || orderId,
+          order_number: orderData.order_number || `ORD-${orderId.slice(0, 8).toUpperCase()}`,
+          status: orderData.status || 'pending',
+          created_at: orderData.created_at || orderData.order_date || new Date().toISOString(),
+          subtotal: parseFloat(String(orderData.subtotal || 0)),
+          discount: parseFloat(String(orderData.discount || 0)),
+          delivery_fee: parseFloat(String(orderData.delivery_fee || orderData.shipping || 0)),
+          total: parseFloat(String(orderData.total || 0)),
+          payment_method: orderData.payment_method || 'Cash on Delivery',
+          customers: orderData.customers || {},
+          order_items: (orderData.order_items || []) as OrderItem[]
+        });
+        setNewStatus(orderData.status || 'pending');
+      } else {
+        setError(response.error || 'Failed to load order');
+      }
+    } catch (err) {
+      setError('Failed to load order');
+      console.error('Order fetch error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -143,8 +221,21 @@ export function OrderDetail({ orderId, onBack }: OrderDetailProps) {
     );
   };
 
-  const updateOrderStatus = () => {
-    setOrder({ ...order, status: newStatus });
+  const handleUpdateOrderStatus = async () => {
+    if (!order) return;
+    
+    try {
+      const response = await updateOrderStatus(order.id, newStatus);
+      if (response.success) {
+        setOrder({ ...order, status: newStatus });
+        alert('Order status updated successfully');
+      } else {
+        alert(response.error || 'Failed to update order status');
+      }
+    } catch (err) {
+      console.error('Update status error:', err);
+      alert('Failed to update order status');
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -157,6 +248,27 @@ export function OrderDetail({ orderId, onBack }: OrderDetailProps) {
     });
   };
 
+  if (error || !order) {
+    return (
+      <div className="p-6">
+        <Button variant="ghost" onClick={onBack} className="text-[#576D64] mb-4">
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Back to Orders
+        </Button>
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-4">
+            <p className="text-red-600">{error || 'Order not found'}</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Extract data for rendering
+  const customer = order.customers || {};
+  const items: OrderItem[] = order.order_items || [];
+  const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center gap-4">
@@ -165,13 +277,13 @@ export function OrderDetail({ orderId, onBack }: OrderDetailProps) {
           Back to Orders
         </Button>
         <div className="flex-1">
-          <h1 className="text-2xl font-semibold text-black">Order {order.id}</h1>
-          <p className="text-gray-600">Placed on {formatDate(order.orderDate)}</p>
+          <h1 className="text-2xl font-semibold text-black">Order {order.order_number || order.id}</h1>
+          <p className="text-gray-600">Placed on {formatDate(order.created_at)}</p>
         </div>
         <div className="flex items-center gap-3">
           {getStatusBadge(order.status)}
-          <Badge variant={order.paymentStatus === 'paid' ? 'default' : 'destructive'} className={order.paymentStatus === 'paid' ? 'bg-green-100 text-green-800' : ''}>
-            {order.paymentStatus === 'paid' ? 'Paid' : 'Unpaid'}
+          <Badge variant="default" className="bg-green-100 text-green-800">
+            {order.payment_method || 'Cash on Delivery'}
           </Badge>
         </div>
       </div>
@@ -183,27 +295,27 @@ export function OrderDetail({ orderId, onBack }: OrderDetailProps) {
             <div className="flex items-center gap-2">
               <Package className="w-5 h-5 text-[#576D64]" />
               <div>
-                <div className="text-2xl font-bold text-black">{order.items.length}</div>
-                <div className="text-sm text-gray-600">Items</div>
+                <div className="text-2xl font-bold text-black">{totalItems}</div>
+                <div className="text-sm text-gray-600">Total Items</div>
               </div>
             </div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-2xl font-bold text-black">${order.total}</div>
+            <div className="text-2xl font-bold text-black">${order.total.toFixed(2)}</div>
             <div className="text-sm text-gray-600">Total Amount</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-2xl font-bold text-green-600">${order.subtotal}</div>
+            <div className="text-2xl font-bold text-green-600">${order.subtotal.toFixed(2)}</div>
             <div className="text-sm text-gray-600">Subtotal</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-2xl font-bold text-[#576D64]">${order.shipping}</div>
+            <div className="text-2xl font-bold text-[#576D64]">${order.delivery_fee.toFixed(2)}</div>
             <div className="text-sm text-gray-600">Shipping</div>
           </CardContent>
         </Card>
@@ -228,27 +340,41 @@ export function OrderDetail({ orderId, onBack }: OrderDetailProps) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {order.items.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <ImageWithFallback
-                            src={item.image}
-                            alt={item.name}
-                            className="w-12 h-12 rounded-lg object-cover"
-                          />
-                          <div>
-                            <div className="font-medium text-black">{item.name}</div>
-                            <div className="text-sm text-gray-600">{item.size} • {item.color}</div>
+                  {items.length > 0 ? (
+                    items.map((item, index) => (
+                      <TableRow key={item.id || index}>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <ImageWithFallback
+                              src={item.product_image || '/placeholder.svg'}
+                              alt={item.product_name}
+                              className="w-12 h-12 rounded-lg object-cover"
+                            />
+                            <div>
+                              <div className="font-medium text-black">{item.product_name}</div>
+                              {(item.size || item.color) && (
+                                <div className="text-sm text-gray-600">
+                                  {item.size ? `${item.size}` : ''}
+                                  {item.size && item.color ? ' • ' : ''}
+                                  {item.color ? `${item.color}` : ''}
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
+                        </TableCell>
+                        <TableCell className="font-mono text-sm">{item.product_id?.slice(0, 8) || 'N/A'}</TableCell>
+                        <TableCell>{item.quantity}</TableCell>
+                        <TableCell>${parseFloat(String(item.price)).toFixed(2)}</TableCell>
+                        <TableCell className="font-medium">${(parseFloat(String(item.price)) * item.quantity).toFixed(2)}</TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                        No items found
                       </TableCell>
-                      <TableCell className="font-mono text-sm">{item.sku}</TableCell>
-                      <TableCell>{item.quantity}</TableCell>
-                      <TableCell>${item.price}</TableCell>
-                      <TableCell className="font-medium">${(item.price * item.quantity).toFixed(2)}</TableCell>
                     </TableRow>
-                  ))}
+                  )}
                 </TableBody>
               </Table>
 
@@ -257,26 +383,22 @@ export function OrderDetail({ orderId, onBack }: OrderDetailProps) {
               <div className="space-y-2">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Subtotal</span>
-                  <span className="text-black">${order.subtotal}</span>
+                  <span className="text-black">${order.subtotal.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Shipping</span>
-                  <span className="text-black">${order.shipping}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Tax</span>
-                  <span className="text-black">${order.tax}</span>
+                  <span className="text-black">${order.delivery_fee.toFixed(2)}</span>
                 </div>
                 {order.discount > 0 && (
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Discount</span>
-                    <span className="text-green-600">-${order.discount}</span>
+                    <span className="text-gray-600">Total Discount</span>
+                    <span className="text-green-600">-${order.discount.toFixed(2)}</span>
                   </div>
                 )}
                 <Separator />
                 <div className="flex justify-between font-bold text-lg">
                   <span className="text-black">Total</span>
-                  <span className="text-black">${order.total}</span>
+                  <span className="text-black">${order.total.toFixed(2)}</span>
                 </div>
               </div>
             </CardContent>
@@ -295,9 +417,9 @@ export function OrderDetail({ orderId, onBack }: OrderDetailProps) {
             </CardHeader>
             <CardContent className="space-y-3">
               <div>
-                <div className="font-medium text-black">{order.customer.name}</div>
-                <div className="text-sm text-gray-600">{order.customer.email}</div>
-                <div className="text-sm text-gray-600">{order.customer.phone}</div>
+                <div className="font-medium text-black">{customer.full_name || 'N/A'}</div>
+                <div className="text-sm text-gray-600">{customer.email || 'N/A'}</div>
+                <div className="text-sm text-gray-600">{customer.phone_number || 'N/A'}</div>
               </div>
             </CardContent>
           </Card>
@@ -312,21 +434,9 @@ export function OrderDetail({ orderId, onBack }: OrderDetailProps) {
             </CardHeader>
             <CardContent>
               <div className="text-sm text-black">
-                <p>{order.shippingAddress.street}</p>
-                <p>{order.shippingAddress.city}, {order.shippingAddress.state} {order.shippingAddress.zipCode}</p>
-                <p>{order.shippingAddress.country}</p>
-              </div>
-              <div className="mt-3 pt-3 border-t">
-                <div className="text-sm">
-                  <div className="font-medium text-black">Shipping Method</div>
-                  <div className="text-gray-600">{order.shippingMethod}</div>
-                </div>
-                {order.trackingNumber && (
-                  <div className="mt-2">
-                    <div className="font-medium text-black">Tracking Number</div>
-                    <div className="text-sm font-mono text-[#576D64]">{order.trackingNumber}</div>
-                  </div>
-                )}
+                <p>{customer.full_address || 'N/A'}</p>
+                {customer.thana && <p>{customer.thana}</p>}
+                {customer.district && <p>{customer.district}</p>}
               </div>
             </CardContent>
           </Card>
@@ -342,18 +452,8 @@ export function OrderDetail({ orderId, onBack }: OrderDetailProps) {
             <CardContent>
               <div className="space-y-2">
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Status</span>
-                  <Badge variant={order.paymentStatus === 'paid' ? 'default' : 'destructive'} className={order.paymentStatus === 'paid' ? 'bg-green-100 text-green-800' : ''}>
-                    {order.paymentStatus === 'paid' ? 'Paid' : 'Unpaid'}
-                  </Badge>
-                </div>
-                <div className="flex justify-between">
                   <span className="text-gray-600">Method</span>
-                  <span className="text-black">Credit Card</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Card</span>
-                  <span className="text-black">**** 4567</span>
+                  <span className="text-black font-medium">{order.payment_method || 'Cash on Delivery'}</span>
                 </div>
               </div>
             </CardContent>
@@ -379,7 +479,7 @@ export function OrderDetail({ orderId, onBack }: OrderDetailProps) {
                 </SelectContent>
               </Select>
               <Button 
-                onClick={updateOrderStatus}
+                onClick={handleUpdateOrderStatus}
                 disabled={newStatus === order.status}
                 className="w-full bg-[#576D64] hover:bg-[#465A52]"
               >
@@ -390,37 +490,7 @@ export function OrderDetail({ orderId, onBack }: OrderDetailProps) {
         </div>
       </div>
 
-      {/* Order History */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Order History</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {order.orderHistory.map((event, index) => (
-              <div key={index} className="flex gap-4">
-                <div className="flex-shrink-0 w-2 h-2 bg-[#576D64] rounded-full mt-2"></div>
-                <div className="flex-1">
-                  <div className="font-medium text-black">{event.status}</div>
-                  <div className="text-sm text-gray-600">{event.description}</div>
-                  <div className="text-xs text-gray-500 mt-1">{formatDate(event.date)}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
 
-      {order.notes && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Order Notes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-gray-700">{order.notes}</p>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }

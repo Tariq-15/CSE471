@@ -12,10 +12,9 @@ import {
 
 interface DashboardTopbarProps {
   onToggleSidebar: () => void;
-  onSectionChange: (section: string) => void;
 }
 
-export function DashboardTopbar({ onToggleSidebar, onSectionChange }: DashboardTopbarProps) {
+export function DashboardTopbar({ onToggleSidebar }: DashboardTopbarProps) {
   return (
     <header className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
       <div className="flex items-center gap-4">
@@ -55,11 +54,11 @@ export function DashboardTopbar({ onToggleSidebar, onSectionChange }: DashboardT
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent className="w-56" align="end" forceMount>
-            <DropdownMenuItem onClick={() => onSectionChange('settings')}>
+            <DropdownMenuItem onClick={() => navigate('/settings')}>
               <User className="mr-2 h-4 w-4" />
               <span>Profile</span>
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onSectionChange('settings')}>
+            <DropdownMenuItem onClick={() => navigate('/settings')}>
               <Settings className="mr-2 h-4 w-4" />
               <span>Settings</span>
             </DropdownMenuItem>

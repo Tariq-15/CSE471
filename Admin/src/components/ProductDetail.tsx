@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -13,18 +14,20 @@ import { ImageUpload } from "./ImageUpload";
 import { getProduct, updateProduct, getSizeChartTemplates, getSizeChartTemplate } from "@/lib/api";
 import type { Product, SizeChartTemplate } from "@/lib/api";
 
-interface ProductDetailProps {
-  productId: string;
-  onBack: () => void;
-}
-
 interface SizeStock {
   size_label: string;
   stock: number;
   row_id: number;
 }
 
-export function ProductDetail({ productId, onBack }: ProductDetailProps) {
+export function ProductDetail() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const productId = id || '';
+
+  const onBack = () => {
+    navigate('/products');
+  };
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);

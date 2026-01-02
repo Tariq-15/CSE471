@@ -64,12 +64,16 @@ const mockSupplierData = {
   }
 };
 
-interface SupplierDetailProps {
-  supplierId: number;
-  onBack: () => void;
-}
+import { useParams, useNavigate } from "react-router-dom";
 
-export function SupplierDetail({ supplierId, onBack }: SupplierDetailProps) {
+export function SupplierDetail() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const supplierId = id ? parseInt(id) : 0;
+
+  const onBack = () => {
+    navigate('/suppliers');
+  };
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isOrderDialogOpen, setIsOrderDialogOpen] = useState(false);
   

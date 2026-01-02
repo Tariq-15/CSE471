@@ -13,11 +13,10 @@ import { ImageWithFallback } from "./figma/ImageWithFallback";
 import { getProducts, createProduct, deleteProduct } from "@/lib/api";
 import type { Product } from "@/lib/api";
 
-interface ProductsManagementProps {
-  onViewProduct?: (productId: string) => void;
-}
+import { useNavigate } from "react-router-dom";
 
-export function ProductsManagement({ onViewProduct }: ProductsManagementProps) {
+export function ProductsManagement() {
+  const navigate = useNavigate();
   const [products, setProducts] = useState<Product[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -368,7 +367,7 @@ export function ProductsManagement({ onViewProduct }: ProductsManagementProps) {
                           <Button 
                             variant="ghost" 
                             size="sm"
-                            onClick={() => onViewProduct?.(product.id)}
+                            onClick={() => navigate(`/products/${product.id}`)}
                           >
                             <Eye className="w-4 h-4" />
                           </Button>

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader } from "./ui/card";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -79,11 +80,8 @@ const mockCustomers = [
   }
 ];
 
-interface CustomersManagementProps {
-  onViewCustomer?: (customerId: number) => void;
-}
-
-export function CustomersManagement({ onViewCustomer }: CustomersManagementProps) {
+export function CustomersManagement() {
+  const navigate = useNavigate();
   const [customers, setCustomers] = useState(mockCustomers);
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -168,7 +166,7 @@ export function CustomersManagement({ onViewCustomer }: CustomersManagementProps
                       <Button 
                         variant="ghost" 
                         size="sm"
-                        onClick={() => onViewCustomer?.(customer.id)}
+                        onClick={() => navigate(`/customers/${customer.id}`)}
                       >
                         <Eye className="w-4 h-4" />
                       </Button>

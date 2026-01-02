@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -9,11 +10,8 @@ import { Search, Eye, Edit, Filter, Loader2 } from "lucide-react";
 import { getOrders, getOrderStats, updateOrderStatus } from "@/lib/api";
 import type { Order } from "@/lib/api";
 
-interface OrdersManagementProps {
-  onViewOrder?: (orderId: string) => void;
-}
-
-export function OrdersManagement({ onViewOrder }: OrdersManagementProps) {
+export function OrdersManagement() {
+  const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -232,7 +230,7 @@ export function OrdersManagement({ onViewOrder }: OrdersManagementProps) {
                           <Button 
                             variant="ghost" 
                             size="sm"
-                            onClick={() => onViewOrder?.(order.id)}
+                            onClick={() => navigate(`/orders/${order.id}`)}
                           >
                             <Eye className="w-4 h-4" />
                           </Button>

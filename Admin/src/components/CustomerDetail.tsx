@@ -10,10 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { ArrowLeft, Edit, Save, Mail, Phone, MapPin, ShoppingBag, Calendar, Star } from "lucide-react";
 
-interface CustomerDetailProps {
-  customerId: number;
-  onBack: () => void;
-}
+import { useParams, useNavigate } from "react-router-dom";
 
 const mockCustomer = {
   id: 1,
@@ -91,7 +88,14 @@ const mockCustomer = {
   notes: "VIP customer - Always provide priority support. Prefers email communication over phone calls."
 };
 
-export function CustomerDetail({ customerId, onBack }: CustomerDetailProps) {
+export function CustomerDetail() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const customerId = id ? parseInt(id) : 0;
+
+  const onBack = () => {
+    navigate('/customers');
+  };
   const [customer, setCustomer] = useState(mockCustomer);
   const [isEditing, setIsEditing] = useState(false);
 
