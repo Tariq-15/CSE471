@@ -423,3 +423,28 @@ export async function updateSizeChartValues(templateId: number, values: Array<{ 
     body: JSON.stringify({ values }),
   });
 }
+
+// Categories APIs
+export async function getCategories(): Promise<ApiResponse<Category[]>> {
+  return fetchApi<Category[]>('/api/admin/categories');
+}
+
+export async function createCategory(category: { name: string; description?: string }): Promise<ApiResponse<Category>> {
+  return fetchApi<Category>('/api/admin/categories', {
+    method: 'POST',
+    body: JSON.stringify(category),
+  });
+}
+
+export async function updateCategory(id: number, category: { name: string; description?: string }): Promise<ApiResponse<Category>> {
+  return fetchApi<Category>(`/api/admin/categories/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(category),
+  });
+}
+
+export async function deleteCategory(id: number): Promise<ApiResponse<void>> {
+  return fetchApi<void>(`/api/admin/categories/${id}`, {
+    method: 'DELETE',
+  });
+}
