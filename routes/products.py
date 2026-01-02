@@ -390,30 +390,43 @@ def get_product_reviews(product_id):
         
         reviews = response.data or []
         
-        # Check if user has purchased this product for each review
-        if user_id:
-            # Get all orders for this user
-            orders_response = supabase.table('orders')\
-                .select('id')\
-                .eq('user_id', user_id)\
+        # Check if each reviewer has purchased this product
+        # Get all orders that contain this product
+        order_items_with_product = supabase.table('order_items')\
+            .select('order_id')\
+            .eq('product_id', product_id)\
+            .execute()
+        
+        order_ids_with_product = {item['order_id'] for item in (order_items_with_product.data or [])}
+        
+        if order_ids_with_product:
+            # Get customer info for these orders
+            orders_with_customers = supabase.table('orders')\
+                .select('id, customer_id')\
+                .in_('id', list(order_ids_with_product))\
                 .execute()
             
-            order_ids = [o['id'] for o in (orders_response.data or [])]
+            # Get customer names for these orders
+            customer_ids = {o['customer_id'] for o in (orders_with_customers.data or []) if o.get('customer_id')}
             
-            if order_ids:
-                # Check if any order_items contain this product
-                order_items_response = supabase.table('order_items')\
-                    .select('order_id')\
-                    .eq('product_id', product_id)\
-                    .in_('order_id', order_ids)\
+            if customer_ids:
+                customers = supabase.table('customers')\
+                    .select('id, full_name, email')\
+                    .in_('id', list(customer_ids))\
                     .execute()
                 
-                purchased_order_ids = {item['order_id'] for item in (order_items_response.data or [])}
+                # Create a set of customer names/emails who purchased
+                purchaser_names = set()
+                for customer in (customers.data or []):
+                    if customer.get('full_name'):
+                        purchaser_names.add(customer['full_name'].lower().strip())
+                    if customer.get('email'):
+                        purchaser_names.add(customer['email'].lower().strip())
                 
-                # Mark reviews as verified if the reviewer purchased
-                # We'll check by matching user_name with customer data from orders
+                # Mark reviews as verified if reviewer name matches a purchaser
                 for review in reviews:
-                    review['is_verified_purchase'] = len(purchased_order_ids) > 0
+                    reviewer_name = review.get('user_name', '').lower().strip()
+                    review['is_verified_purchase'] = reviewer_name in purchaser_names
             else:
                 for review in reviews:
                     review['is_verified_purchase'] = False
