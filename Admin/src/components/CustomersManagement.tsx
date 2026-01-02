@@ -1,105 +1,86 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader } from "./ui/card";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
-import { Search, Eye, Edit, Trash2, Mail } from "lucide-react";
-
-const mockCustomers = [
-  {
-    id: 1,
-    name: "Sarah Johnson",
-    email: "sarah.j@email.com",
-    avatar: "/api/placeholder/40/40",
-    joinDate: "2024-01-15",
-    ordersCount: 12,
-    totalSpent: 1245.99,
-    status: "active"
-  },
-  {
-    id: 2,
-    name: "Mike Chen",
-    email: "mike.chen@email.com",
-    avatar: "/api/placeholder/40/40",
-    joinDate: "2024-03-22",
-    ordersCount: 8,
-    totalSpent: 654.50,
-    status: "active"
-  },
-  {
-    id: 3,
-    name: "Emma Wilson",
-    email: "emma.w@email.com",
-    avatar: "/api/placeholder/40/40",
-    joinDate: "2024-02-10",
-    ordersCount: 15,
-    totalSpent: 2100.25,
-    status: "active"
-  },
-  {
-    id: 4,
-    name: "David Brown",
-    email: "david.brown@email.com",
-    avatar: "/api/placeholder/40/40",
-    joinDate: "2023-11-05",
-    ordersCount: 3,
-    totalSpent: 187.99,
-    status: "inactive"
-  },
-  {
-    id: 5,
-    name: "Lisa Garcia",
-    email: "lisa.garcia@email.com",
-    avatar: "/api/placeholder/40/40",
-    joinDate: "2024-06-18",
-    ordersCount: 7,
-    totalSpent: 445.75,
-    status: "active"
-  },
-  {
-    id: 6,
-    name: "James Taylor",
-    email: "james.t@email.com",
-    avatar: "/api/placeholder/40/40",
-    joinDate: "2024-04-12",
-    ordersCount: 11,
-    totalSpent: 890.50,
-    status: "active"
-  },
-  {
-    id: 7,
-    name: "Maria Rodriguez",
-    email: "maria.r@email.com",
-    avatar: "/api/placeholder/40/40",
-    joinDate: "2024-08-03",
-    ordersCount: 2,
-    totalSpent: 125.99,
-    status: "active"
-  }
-];
+import { Search, Eye, Edit, Trash2, Mail, Loader2 } from "lucide-react";
+import { getCustomers, getCustomerStats, type Customer } from "@/lib/api";
 
 export function CustomersManagement() {
   const navigate = useNavigate();
-  const [customers, setCustomers] = useState(mockCustomers);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    total: 0,
+    active: 0,
+    new_this_month: 0,
+    total_revenue: 0
+  });
 
-  const filteredCustomers = customers.filter(customer =>
-    customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    customer.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  useEffect(() => {
+    fetchCustomers();
+    fetchStats();
+  }, []);
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
+  const fetchCustomers = async () => {
+    try {
+      setLoading(true);
+      const response = await getCustomers({ page: 1, limit: 100 });
+      if (response.success && response.data) {
+        setCustomers(response.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch customers:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const getInitials = (name: string) => {
-    return name.split(' ').map(n => n[0]).join('').toUpperCase();
+  const fetchStats = async () => {
+    try {
+      const response = await getCustomerStats();
+      if (response.success && response.data) {
+        setStats(response.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch customer stats:', error);
+    }
+  };
+
+  const filteredCustomers = customers.filter(customer => {
+    const name = customer.name || customer.full_name || '';
+    const email = customer.email || '';
+    const search = searchTerm.toLowerCase();
+    return name.toLowerCase().includes(search) || email.toLowerCase().includes(search);
+  });
+
+  const formatDate = (dateString: string) => {
+    if (!dateString) return 'N/A';
+    try {
+      return new Date(dateString).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      });
+    } catch {
+      return dateString;
+    }
+  };
+
+  const getInitials = (name: string | undefined) => {
+    if (!name) return '?';
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  };
+
+  const getCustomerName = (customer: Customer) => {
+    return customer.name || customer.full_name || 'Unknown';
+  };
+
+  const getCustomerStatus = (customer: Customer) => {
+    return customer.customer_type === 'verified' ? 'active' : 'active';
   };
 
   return (
@@ -139,28 +120,43 @@ export function CustomersManagement() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredCustomers.map((customer) => (
-                <TableRow key={customer.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <Avatar className="h-10 w-10">
-                        <AvatarImage src={customer.avatar} alt={customer.name} />
-                        <AvatarFallback className="bg-[#576D64] text-white">
-                          {getInitials(customer.name)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <div className="font-medium text-black">{customer.name}</div>
-                        <div className={`text-xs ${customer.status === 'active' ? 'text-green-600' : 'text-gray-500'}`}>
-                          {customer.status}
-                        </div>
-                      </div>
-                    </div>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin mx-auto text-[#576D64]" />
                   </TableCell>
-                  <TableCell className="text-gray-600">{customer.email}</TableCell>
-                  <TableCell className="text-gray-600">{formatDate(customer.joinDate)}</TableCell>
-                  <TableCell className="text-black font-medium">{customer.ordersCount}</TableCell>
-                  <TableCell className="text-black font-medium">${customer.totalSpent.toFixed(2)}</TableCell>
+                </TableRow>
+              ) : filteredCustomers.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                    No customers found
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredCustomers.map((customer) => {
+                  const customerName = getCustomerName(customer);
+                  const status = getCustomerStatus(customer);
+                  return (
+                    <TableRow key={customer.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-10 w-10">
+                            <AvatarFallback className="bg-[#576D64] text-white">
+                              {getInitials(customerName)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <div className="font-medium text-black">{customerName}</div>
+                            <div className={`text-xs ${status === 'active' ? 'text-green-600' : 'text-gray-500'}`}>
+                              {status}
+                            </div>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-gray-600">{customer.email || 'N/A'}</TableCell>
+                      <TableCell className="text-gray-600">{formatDate(customer.joinDate || customer.created_at || '')}</TableCell>
+                      <TableCell className="text-black font-medium">{customer.orders_count || 0}</TableCell>
+                      <TableCell className="text-black font-medium">${(customer.total_spent || 0).toFixed(2)}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <Button 
@@ -179,7 +175,9 @@ export function CustomersManagement() {
                     </div>
                   </TableCell>
                 </TableRow>
-              ))}
+                  );
+                })
+              )}
             </TableBody>
           </Table>
 
@@ -201,14 +199,14 @@ export function CustomersManagement() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-4">
-            <div className="text-2xl font-bold text-black">{customers.length}</div>
+            <div className="text-2xl font-bold text-black">{stats.total || customers.length}</div>
             <div className="text-sm text-gray-600">Total Customers</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <div className="text-2xl font-bold text-green-600">
-              {customers.filter(c => c.status === 'active').length}
+              {stats.active || customers.filter(c => getCustomerStatus(c) === 'active').length}
             </div>
             <div className="text-sm text-gray-600">Active Customers</div>
           </CardContent>
@@ -216,7 +214,7 @@ export function CustomersManagement() {
         <Card>
           <CardContent className="p-4">
             <div className="text-2xl font-bold text-[#576D64]">
-              {customers.filter(c => c.joinDate.startsWith('2024-09')).length}
+              {stats.new_this_month || 0}
             </div>
             <div className="text-sm text-gray-600">New This Month</div>
           </CardContent>
@@ -224,7 +222,7 @@ export function CustomersManagement() {
         <Card>
           <CardContent className="p-4">
             <div className="text-2xl font-bold text-black">
-              ${customers.reduce((sum, c) => sum + c.totalSpent, 0).toFixed(0)}
+              ${(stats.total_revenue || customers.reduce((sum, c) => sum + (c.total_spent || 0), 0)).toFixed(0)}
             </div>
             <div className="text-sm text-gray-600">Total Revenue</div>
           </CardContent>

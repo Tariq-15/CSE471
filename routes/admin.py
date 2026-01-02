@@ -373,7 +373,21 @@ def admin_customers():
         
         customers = []
         for c in response.data or []:
+            # Get order statistics for each customer
+            orders_response = supabase.table('orders')\
+                .select('id, total')\
+                .eq('customer_id', c['id'])\
+                .execute()
+            
+            orders_count = len(orders_response.data) if orders_response.data else 0
+            total_spent = sum(float(order.get('total', 0)) for order in (orders_response.data or []))
+            
             c['customer_type'] = 'verified' if c.get('user_id') else 'cold'
+            c['orders_count'] = orders_count
+            c['total_spent'] = round(total_spent, 2)
+            c['name'] = c.get('full_name', 'Unknown')
+            c['joinDate'] = c.get('created_at', '')
+            
             if customer_type == 'all' or c['customer_type'] == customer_type:
                 customers.append(c)
         
