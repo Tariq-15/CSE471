@@ -493,12 +493,15 @@ export function SizeChartManagement() {
                         placeholder="Display Name (e.g., Chest)"
                         className="w-200"
                       />
-                      <Input
-                        value={newColumnUnit}
-                        onChange={(e) => setNewColumnUnit(e.target.value)}
-                        placeholder="Unit"
-                        className="w-20"
-                      />
+                      <Select value={newColumnUnit} onValueChange={setNewColumnUnit}>
+                        <SelectTrigger className="w-20">
+                          <SelectValue placeholder="Unit" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cm">cm</SelectItem>
+                          <SelectItem value="in">in</SelectItem>
+                        </SelectContent>
+                      </Select>
                       <Button 
                         onClick={handleAddColumn} 
                         disabled={!newColumnName.trim() || isSubmitting}
