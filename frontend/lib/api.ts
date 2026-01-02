@@ -37,6 +37,7 @@ export interface Review {
   comment?: string
   posted_date?: string
   created_at?: string
+  is_verified_purchase?: boolean
 }
 
 export interface SizeChartData {
