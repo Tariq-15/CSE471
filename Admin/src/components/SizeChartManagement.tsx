@@ -145,10 +145,27 @@ export function SizeChartManagement() {
       
       if (response.success) {
         setNewRowLabel("");
-        // Refresh template
-        const refreshed = await getSizeChartTemplate(selectedTemplate.id);
-        if (refreshed.success && refreshed.data) {
-          setSelectedTemplate(refreshed.data);
+        // Refresh template to show new row
+        try {
+          const refreshed = await getSizeChartTemplate(selectedTemplate.id);
+          if (refreshed.success && refreshed.data) {
+            setSelectedTemplate(refreshed.data);
+            console.log('Template refreshed successfully:', refreshed.data);
+          } else {
+            console.error('Failed to refresh template:', refreshed.error);
+            // Still update locally by adding the new row to the current template
+            if (response.data) {
+              const updatedRows = [...(selectedTemplate.rows || []), response.data];
+              setSelectedTemplate({ ...selectedTemplate, rows: updatedRows });
+            }
+          }
+        } catch (refreshError) {
+          console.error('Error refreshing template:', refreshError);
+          // Still update locally if we have the new row data
+          if (response.data) {
+            const updatedRows = [...(selectedTemplate.rows || []), response.data];
+            setSelectedTemplate({ ...selectedTemplate, rows: updatedRows });
+          }
         }
       } else {
         alert(`Failed to add row: ${response.error || 'Unknown error'}`);
