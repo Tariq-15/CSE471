@@ -692,8 +692,25 @@ def get_featured_products():
 
 @bp.route('/categories', methods=['GET'])
 def get_product_categories():
-    """Get all distinct categories from active products"""
+    """Get all categories from categories table (preferred) or fallback to distinct from products"""
     try:
+        # Try to get from categories table first
+        try:
+            categories_response = supabase.table('categories')\
+                .select('name')\
+                .order('name')\
+                .execute()
+            
+            if categories_response.data:
+                categories_list = [cat['name'] for cat in categories_response.data]
+                return jsonify({
+                    "success": True,
+                    "data": categories_list
+                }), 200
+        except:
+            pass  # Fallback to old method
+        
+        # Fallback: Get distinct categories from active products
         response = supabase.table('products')\
             .select('category')\
             .eq('status', 'active')\
