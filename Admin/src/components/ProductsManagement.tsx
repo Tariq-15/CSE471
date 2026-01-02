@@ -10,8 +10,8 @@ import { Textarea } from "./ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Plus, Search, Edit, Trash2, Eye, Loader2 } from "lucide-react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
-import { getProducts, createProduct, deleteProduct } from "@/lib/api";
-import type { Product } from "@/lib/api";
+import { getProducts, createProduct, deleteProduct, getCategories } from "@/lib/api";
+import type { Product, Category } from "@/lib/api";
 
 import { useNavigate } from "react-router-dom";
 
@@ -36,10 +36,30 @@ export function ProductsManagement() {
     tags: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loadingCategories, setLoadingCategories] = useState(false);
 
   useEffect(() => {
     fetchProducts();
   }, [currentPage, searchTerm]);
+
+  useEffect(() => {
+    fetchCategories();
+  }, []);
+
+  const fetchCategories = async () => {
+    try {
+      setLoadingCategories(true);
+      const response = await getCategories();
+      if (response.success && response.data) {
+        setCategories(response.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch categories:', error);
+    } finally {
+      setLoadingCategories(false);
+    }
+  };
 
   const fetchProducts = async () => {
     try {
@@ -184,18 +204,21 @@ export function ProductsManagement() {
                 <Select 
                   value={newProduct.category}
                   onValueChange={(value: string) => setNewProduct({...newProduct, category: value})}
+                  disabled={loadingCategories}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select category" />
+                    <SelectValue placeholder={loadingCategories ? "Loading categories..." : "Select category"} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="T-shirts">T-shirts</SelectItem>
-                    <SelectItem value="Shirts">Shirts</SelectItem>
-                    <SelectItem value="Shorts">Shorts</SelectItem>
-                    <SelectItem value="Jeans">Jeans</SelectItem>
-                    <SelectItem value="Hoodie">Hoodie</SelectItem>
-                    <SelectItem value="Outerwear">Outerwear</SelectItem>
-                    <SelectItem value="Accessories">Accessories</SelectItem>
+                    {categories.length === 0 && !loadingCategories ? (
+                      <SelectItem value="" disabled>No categories available</SelectItem>
+                    ) : (
+                      categories.map((category) => (
+                        <SelectItem key={category.id} value={category.name}>
+                          {category.name}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>
