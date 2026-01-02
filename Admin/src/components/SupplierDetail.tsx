@@ -272,7 +272,7 @@ export function SupplierDetail() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Total Spent</p>
-                <p className="text-2xl font-semibold text-black">${supplier.totalSpent.toLocaleString()}</p>
+                <p className="text-2xl font-semibold text-black">৳{supplier.totalSpent.toLocaleString()}</p>
               </div>
               <DollarSign className="w-8 h-8 text-[#576D64]" />
             </div>
@@ -448,7 +448,7 @@ export function SupplierDetail() {
                       <TableCell className="font-medium text-black">{order.id}</TableCell>
                       <TableCell className="text-gray-600">{order.date}</TableCell>
                       <TableCell className="text-gray-600">{order.items} items</TableCell>
-                      <TableCell className="font-medium text-black">${order.amount.toLocaleString()}</TableCell>
+                      <TableCell className="font-medium text-black">৳{order.amount.toLocaleString()}</TableCell>
                       <TableCell>{getOrderStatusBadge(order.status)}</TableCell>
                     </TableRow>
                   ))}
@@ -482,7 +482,7 @@ export function SupplierDetail() {
                           {product.category}
                         </Badge>
                       </TableCell>
-                      <TableCell className="font-medium text-black">${product.price}</TableCell>
+                      <TableCell className="font-medium text-black">৳{product.price}</TableCell>
                       <TableCell className="text-gray-600">{product.stock}</TableCell>
                     </TableRow>
                   ))}

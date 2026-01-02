@@ -34,7 +34,7 @@ export function ProductCard({ product }: ProductCardProps) {
           ))}
           <span className="text-sm text-muted-foreground ml-1">{product.rating}/5</span>
         </div>
-        <p className="font-bold text-lg">${product.price.toFixed(2)}</p>
+        <p className="font-bold text-lg">৳{product.price.toFixed(2)}</p>
       </div>
     </Card>
   )

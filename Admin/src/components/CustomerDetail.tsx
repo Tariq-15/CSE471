@@ -180,13 +180,13 @@ export function CustomerDetail() {
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-2xl font-bold text-green-600">${customer.totalSpent.toFixed(2)}</div>
+            <div className="text-2xl font-bold text-green-600">৳{customer.totalSpent.toFixed(2)}</div>
             <div className="text-sm text-gray-600">Total Spent</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-2xl font-bold text-[#576D64]">${customer.averageOrderValue.toFixed(2)}</div>
+            <div className="text-2xl font-bold text-[#576D64]">৳{customer.averageOrderValue.toFixed(2)}</div>
             <div className="text-sm text-gray-600">Avg Order Value</div>
           </CardContent>
         </Card>
@@ -296,7 +296,7 @@ export function CustomerDetail() {
                 <div className="space-y-3 pt-4 border-t">
                   <div className="flex justify-between">
                     <span className="text-gray-600">Customer Lifetime Value</span>
-                    <span className="font-medium text-green-600">${customer.totalSpent.toFixed(2)}</span>
+                    <span className="font-medium text-green-600">৳{customer.totalSpent.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Order Frequency</span>
@@ -347,7 +347,7 @@ export function CustomerDetail() {
                       <TableCell className="text-gray-600">{formatDate(order.date)}</TableCell>
                       <TableCell>{getOrderStatusBadge(order.status)}</TableCell>
                       <TableCell className="text-gray-600">{order.items} items</TableCell>
-                      <TableCell className="font-medium text-black">${order.total}</TableCell>
+                      <TableCell className="font-medium text-black">৳{order.total}</TableCell>
                       <TableCell>
                         <Button variant="ghost" size="sm" className="text-[#576D64] hover:text-[#465A52]">
                           View Details

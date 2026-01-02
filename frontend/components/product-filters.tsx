@@ -15,15 +15,14 @@ export function ProductFilters() {
   
   // Initialize from URL params or defaults
   const minPriceFromUrl = searchParams.get('min_price') ? Number(searchParams.get('min_price')) : 0
-  const maxPriceFromUrl = searchParams.get('max_price') ? Number(searchParams.get('max_price')) : 200
-  const colorFromUrl = searchParams.get('color') || ''
+  // If max_price is 99999, show 3000 in UI (slider max)
+  const maxPriceFromUrl = searchParams.get('max_price') ? 
+    (Number(searchParams.get('max_price')) === 99999 ? 3000 : Number(searchParams.get('max_price'))) : 3000
   const categoryFromUrl = searchParams.get('category') || 'all'
   
   const [priceRange, setPriceRange] = useState<number[]>([minPriceFromUrl, maxPriceFromUrl])
   const [selectedCategories, setSelectedCategories] = useState<string[]>([categoryFromUrl])
-  const [selectedColors, setSelectedColors] = useState<string[]>(colorFromUrl ? [colorFromUrl] : [])
   const [showPrice, setShowPrice] = useState(true)
-  const [showColors, setShowColors] = useState(true)
   const [categories, setCategories] = useState<Array<{ id: string; label: string; value: string }>>([
     { id: "all", label: "All", value: "all" }
   ])
@@ -85,27 +84,16 @@ export function ProductFilters() {
       setSelectedCategories(['all'])
     }
     
-    setSelectedColors(colorFromUrl ? [colorFromUrl] : [])
-  }, [minPriceFromUrl, maxPriceFromUrl, colorFromUrl, categoryFromUrl, categories])
-
-  const colors = [
-    { name: "Green", value: "bg-green-500", apiValue: "Green" },
-    { name: "Red", value: "bg-red-500", apiValue: "Red" },
-    { name: "Yellow", value: "bg-yellow-400", apiValue: "Yellow" },
-    { name: "Orange", value: "bg-orange-500", apiValue: "Orange" },
-    { name: "Cyan", value: "bg-cyan-400", apiValue: "Cyan" },
-    { name: "Blue", value: "bg-blue-600", apiValue: "Blue" },
-    { name: "Purple", value: "bg-purple-600", apiValue: "Purple" },
-    { name: "Pink", value: "bg-pink-500", apiValue: "Pink" },
-    { name: "White", value: "bg-white border border-gray-300", apiValue: "White" },
-    { name: "Black", value: "bg-black", apiValue: "Black" },
-  ]
+  }, [minPriceFromUrl, maxPriceFromUrl, categoryFromUrl, categories])
   
   const applyFilters = () => {
     const params = new URLSearchParams(searchParams.toString())
     
     // Reset page to 1 when filters change
     params.delete('page')
+    
+    // Remove color parameter if it exists (no longer supported)
+    params.delete('color')
     
     // Set price filters
     if (priceRange[0] > 0) {
@@ -114,10 +102,12 @@ export function ProductFilters() {
       params.delete('min_price')
     }
     
-    if (priceRange[1] < 200) {
+    // If max price is 3000 (slider max), send 99999 to backend
+    if (priceRange[1] < 3000) {
       params.set('max_price', priceRange[1].toString())
     } else {
-      params.delete('max_price')
+      // When slider hits max (3000), set to 99999 in backend
+      params.set('max_price', '99999')
     }
     
     // Set category filter
@@ -126,13 +116,6 @@ export function ProductFilters() {
       params.set('category', selectedCategory)
     } else {
       params.delete('category')
-    }
-    
-    // Set color filter (only one color at a time for now)
-    if (selectedColors.length > 0) {
-      params.set('color', selectedColors[0])
-    } else {
-      params.delete('color')
     }
     
     router.push(`/products?${params.toString()}`)
@@ -208,44 +191,15 @@ export function ProductFilters() {
                   value={priceRange}
                   onValueChange={setPriceRange}
                   min={0}
-                  max={200}
-                  step={5}
+                  max={3000}
+                  step={50}
                   className="w-full"
                 />
               </div>
               <div className="flex items-center justify-between text-sm">
-                <span className="font-medium">${priceRange[0]}</span>
-                <span className="font-medium">${priceRange[1]}</span>
+                <span className="font-medium">৳{priceRange[0]}</span>
+                <span className="font-medium">৳{priceRange[1] === 3000 ? '3000+' : priceRange[1]}</span>
               </div>
-            </div>
-          )}
-        </div>
-
-        {/* Colors */}
-        <div className="mb-6">
-          <button onClick={() => setShowColors(!showColors)} className="flex items-center justify-between w-full mb-4">
-            <h3 className="font-semibold">Colors</h3>
-            <ChevronUp className={`w-4 h-4 transition-transform ${showColors ? "" : "rotate-180"}`} />
-          </button>
-          {showColors && (
-            <div className="grid grid-cols-5 gap-3">
-              {colors.map((color) => (
-                <button
-                  key={color.name}
-                  onClick={() => {
-                    // Only allow one color selection at a time
-                    if (selectedColors.includes(color.apiValue)) {
-                      setSelectedColors([])
-                    } else {
-                      setSelectedColors([color.apiValue])
-                    }
-                  }}
-                  className={`w-9 h-9 rounded-full ${color.value} ${
-                    selectedColors.includes(color.apiValue) ? "ring-2 ring-black ring-offset-2" : ""
-                  } hover:scale-110 transition-transform`}
-                  title={color.name}
-                />
-              ))}
             </div>
           )}
         </div>

@@ -229,7 +229,7 @@ export function CustomersManagement() {
         <Card>
           <CardContent className="p-4">
             <div className="text-2xl font-bold text-black">
-              ${(Number(stats.total_revenue) || customers.reduce((sum, c) => sum + (Number(c.total_spent) || 0), 0)).toFixed(0)}
+              ৳{(Number(stats.total_revenue) || customers.reduce((sum, c) => sum + (Number(c.total_spent) || 0), 0)).toFixed(0)}
             </div>
             <div className="text-sm text-gray-600">Total Revenue</div>
           </CardContent>

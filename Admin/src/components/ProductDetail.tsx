@@ -299,13 +299,13 @@ export function ProductDetail() {
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-2xl font-bold text-green-600">${totalRevenue.toFixed(2)}</div>
+            <div className="text-2xl font-bold text-green-600">৳{totalRevenue.toFixed(2)}</div>
             <div className="text-sm text-gray-600">Total Revenue</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-2xl font-bold text-[#576D64]">${product.price?.toFixed(2) || '0.00'}</div>
+            <div className="text-2xl font-bold text-[#576D64]">৳{product.price?.toFixed(2) || '0.00'}</div>
             <div className="text-sm text-gray-600">Current Price</div>
           </CardContent>
         </Card>
@@ -378,7 +378,7 @@ export function ProductDetail() {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label htmlFor="product-price">Price ($)</Label>
+                      <Label htmlFor="product-price">Price (৳)</Label>
                       <Input 
                         id="product-price" 
                         type="number"
@@ -390,7 +390,7 @@ export function ProductDetail() {
                       />
                     </div>
                     <div>
-                      <Label htmlFor="product-original-price">Original Price ($)</Label>
+                      <Label htmlFor="product-original-price">Original Price (৳)</Label>
                       <Input 
                         id="product-original-price" 
                         type="number"
@@ -524,7 +524,7 @@ export function ProductDetail() {
                     </div>
                     <div className="flex items-center justify-between border-t pt-2">
                       <span className="font-semibold text-[#576D64]">Current Price:</span>
-                      <span className="text-xl font-bold text-[#576D64]">${product.price?.toFixed(2) || '0.00'}</span>
+                      <span className="text-xl font-bold text-[#576D64]">৳{product.price?.toFixed(2) || '0.00'}</span>
                     </div>
                   </div>
                 </div>

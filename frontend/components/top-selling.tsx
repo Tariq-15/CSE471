@@ -16,7 +16,8 @@ export function TopSelling() {
       try {
         const response = await getTopSelling()
         if (response.success && response.data) {
-          setProducts(response.data)
+          // Limit to top 4 products only
+          setProducts(response.data.slice(0, 4))
         }
       } catch (error) {
         console.error('Failed to fetch top selling:', error)

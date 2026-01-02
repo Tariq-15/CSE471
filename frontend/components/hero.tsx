@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button"
 import { Sparkles } from "lucide-react"
+import Link from "next/link"
 
 export function Hero() {
   return (
@@ -15,9 +16,11 @@ export function Hero() {
               Browse through our diverse range of meticulously crafted garments, designed to bring out your
               individuality and cater to your sense of style.
             </p>
-            <Button size="lg" className="rounded-full px-12 text-base h-12">
-              Shop Now
-            </Button>
+            <Link href="/products">
+              <Button size="lg" className="rounded-full px-12 text-base h-12">
+                Shop Now
+              </Button>
+            </Link>
 
             {/* Stats */}
             <div className="flex flex-wrap gap-8 mt-12">
@@ -39,7 +42,7 @@ export function Hero() {
           {/* Right Image */}
           <div className="relative">
             <img
-              src="/placeholder.svg?height=600&width=500"
+              src="/Hero Banner 2.jpg"
               alt="Fashionable couple"
               className="w-full h-[600px] object-cover rounded-lg"
             />

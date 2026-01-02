@@ -303,19 +303,19 @@ export function OrderDetail() {
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-2xl font-bold text-black">${order.total.toFixed(2)}</div>
+            <div className="text-2xl font-bold text-black">৳{order.total.toFixed(2)}</div>
             <div className="text-sm text-gray-600">Total Amount</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-2xl font-bold text-green-600">${order.subtotal.toFixed(2)}</div>
+            <div className="text-2xl font-bold text-green-600">৳{order.subtotal.toFixed(2)}</div>
             <div className="text-sm text-gray-600">Subtotal</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-2xl font-bold text-[#576D64]">${order.delivery_fee.toFixed(2)}</div>
+            <div className="text-2xl font-bold text-[#576D64]">৳{order.delivery_fee.toFixed(2)}</div>
             <div className="text-sm text-gray-600">Shipping</div>
           </CardContent>
         </Card>
@@ -364,8 +364,8 @@ export function OrderDetail() {
                         </TableCell>
                         <TableCell className="font-mono text-sm">{item.product_id?.slice(0, 8) || 'N/A'}</TableCell>
                         <TableCell>{item.quantity}</TableCell>
-                        <TableCell>${parseFloat(String(item.price)).toFixed(2)}</TableCell>
-                        <TableCell className="font-medium">${(parseFloat(String(item.price)) * item.quantity).toFixed(2)}</TableCell>
+                        <TableCell>৳{parseFloat(String(item.price)).toFixed(2)}</TableCell>
+                        <TableCell className="font-medium">৳{(parseFloat(String(item.price)) * item.quantity).toFixed(2)}</TableCell>
                       </TableRow>
                     ))
                   ) : (
@@ -383,22 +383,22 @@ export function OrderDetail() {
               <div className="space-y-2">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Subtotal</span>
-                  <span className="text-black">${order.subtotal.toFixed(2)}</span>
+                  <span className="text-black">৳{order.subtotal.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Shipping</span>
-                  <span className="text-black">${order.delivery_fee.toFixed(2)}</span>
+                  <span className="text-black">৳{order.delivery_fee.toFixed(2)}</span>
                 </div>
                 {order.discount > 0 && (
                   <div className="flex justify-between">
                     <span className="text-gray-600">Total Discount</span>
-                    <span className="text-green-600">-${order.discount.toFixed(2)}</span>
+                    <span className="text-green-600">-৳{order.discount.toFixed(2)}</span>
                   </div>
                 )}
                 <Separator />
                 <div className="flex justify-between font-bold text-lg">
                   <span className="text-black">Total</span>
-                  <span className="text-black">${order.total.toFixed(2)}</span>
+                  <span className="text-black">৳{order.total.toFixed(2)}</span>
                 </div>
               </div>
             </CardContent>

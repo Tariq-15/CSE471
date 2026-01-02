@@ -140,7 +140,7 @@ export function Analytics() {
             <DollarSign className="h-4 w-4 text-[#576D64]" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-black">${stats.total_revenue.toLocaleString()}</div>
+            <div className="text-2xl font-bold text-black">৳{stats.total_revenue.toLocaleString()}</div>
             <p className="text-xs text-green-600 mt-1">From all orders</p>
           </CardContent>
         </Card>
@@ -173,7 +173,7 @@ export function Analytics() {
             <TrendingUp className="h-4 w-4 text-[#576D64]" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-black">${stats.avg_order_value.toFixed(2)}</div>
+            <div className="text-2xl font-bold text-black">৳{stats.avg_order_value.toFixed(2)}</div>
             <p className="text-xs text-gray-600 mt-1">Per transaction</p>
           </CardContent>
         </Card>
@@ -212,7 +212,7 @@ export function Analytics() {
                 stroke="#576D64" 
                 strokeWidth={3}
                 dot={{ fill: '#576D64', strokeWidth: 2, r: 6 }}
-                name="Sales ($)"
+                name="Sales (৳)"
               />
               <Line 
                 type="monotone" 

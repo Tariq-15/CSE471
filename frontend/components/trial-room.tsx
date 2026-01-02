@@ -214,7 +214,7 @@ export function TrialRoom({ productName, productImageUrl }: TrialRoomProps) {
           </Button>
         </DialogTrigger>
         
-        <DialogContent className="max-w-5xl w-[95vw] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-[95vw] w-[95vw] lg:max-w-[90vw] lg:w-[90vw] xl:max-w-[85vw] xl:w-[85vw] h-[95vh] max-h-[95vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-xl">
               <Sparkles className="w-6 h-6 text-purple-600" />
@@ -265,7 +265,7 @@ export function TrialRoom({ productName, productImageUrl }: TrialRoomProps) {
                     onDragOver={handleDragOver}
                     onDrop={handleDrop}
                     className={`
-                      min-h-[400px] border-2 border-dashed rounded-xl cursor-pointer
+                      min-h-[600px] border-2 border-dashed rounded-xl cursor-pointer
                       flex flex-col items-center justify-center gap-4 transition-all p-8
                       ${isDragging 
                         ? 'border-purple-500 bg-purple-50' 
@@ -289,7 +289,7 @@ export function TrialRoom({ productName, productImageUrl }: TrialRoomProps) {
                     </div>
                   </div>
                 ) : isGenerating ? (
-                  <div className="min-h-[400px] flex flex-col items-center justify-center gap-6 p-8 border-2 border-dashed border-purple-200 rounded-xl bg-purple-50">
+                  <div className="min-h-[600px] flex flex-col items-center justify-center gap-6 p-8 border-2 border-dashed border-purple-200 rounded-xl bg-purple-50">
                     <div className="relative">
                       <div className="w-20 h-20 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin"></div>
                       <Sparkles className="w-10 h-10 text-purple-600 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
@@ -354,17 +354,11 @@ export function TrialRoom({ productName, productImageUrl }: TrialRoomProps) {
 
             {/* Error Message */}
             {error && (
-              <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700">
+              <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 mt-6">
                 <AlertCircle className="w-5 h-5 flex-shrink-0" />
                 <p className="text-sm">{error}</p>
               </div>
             )}
-
-            {/* Disclaimer */}
-            <p className="text-xs text-center text-gray-400 pt-2">
-              AI-generated images are approximations and may not perfectly represent the actual product fit.
-              For best results, use a well-lit photo with a neutral background.
-            </p>
           </div>
         </DialogContent>
       </Dialog>

@@ -10,8 +10,10 @@ import { Textarea } from "./ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Plus, Search, Edit, Trash2, Eye, Loader2 } from "lucide-react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
-import { getProducts, createProduct, deleteProduct, getCategories } from "@/lib/api";
+import { getProducts, createProduct, deleteProduct, getCategories, updateProduct } from "@/lib/api";
 import type { Product, Category } from "@/lib/api";
+import { Switch } from "./ui/switch";
+import { toast } from "sonner";
 
 import { useNavigate } from "react-router-dom";
 
@@ -149,7 +151,31 @@ export function ProductsManagement() {
     }
   };
 
+  const handleToggleStatus = async (productId: string, currentStatus: string | undefined) => {
+    const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
+    
+    try {
+      const response = await updateProduct(productId, { status: newStatus });
+      
+      if (response.success) {
+        toast.success(`Product ${newStatus === 'active' ? 'activated' : 'deactivated'} successfully`);
+        fetchProducts();
+      } else {
+        toast.error(response.error || 'Failed to update product status');
+      }
+    } catch (err) {
+      console.error('Toggle status error:', err);
+      toast.error('Failed to update product status');
+    }
+  };
+
   const getStatusBadge = (status: string | undefined, stock: number) => {
+    const isActive = status === 'active';
+    
+    if (!isActive) {
+      return <Badge variant="secondary" className="bg-gray-100 text-gray-800">Inactive</Badge>;
+    }
+    
     if (stock === 0) {
       return <Badge variant="destructive">Out of Stock</Badge>;
     } else if (stock < 10) {
@@ -254,7 +280,7 @@ export function ProductsManagement() {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="variation-price">Price ($) *</Label>
+                    <Label htmlFor="variation-price">Price (৳) *</Label>
                     <Input 
                       id="variation-price" 
                       type="number" 
@@ -335,6 +361,7 @@ export function ProductsManagement() {
                   <TableHead>Stock</TableHead>
                   <TableHead>Price</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Active/Inactive</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -354,8 +381,19 @@ export function ProductsManagement() {
                       </TableCell>
                       <TableCell className="text-gray-600">{product.category}</TableCell>
                       <TableCell className="text-gray-600">{product.stock || 0}</TableCell>
-                      <TableCell className="text-black font-medium">${product.price}</TableCell>
+                      <TableCell className="text-black font-medium">৳{product.price}</TableCell>
                       <TableCell>{getStatusBadge(product.status, product.stock || 0)}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={product.status === 'active'}
+                            onCheckedChange={() => handleToggleStatus(product.id, product.status)}
+                          />
+                          <span className="text-sm text-gray-600">
+                            {product.status === 'active' ? 'Active' : 'Inactive'}
+                          </span>
+                        </div>
+                      </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Button 
@@ -382,7 +420,7 @@ export function ProductsManagement() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                    <TableCell colSpan={7} className="text-center py-8 text-gray-500">
                       No products found
                     </TableCell>
                   </TableRow>

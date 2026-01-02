@@ -11,7 +11,7 @@ const mockNotifications = [
     id: 1,
     type: "order",
     title: "New Order Received",
-    message: "Order #ORD-001 from Sarah Johnson for $156.99",
+    message: "Order #ORD-001 from Sarah Johnson for ৳156.99",
     timestamp: "2024-09-23T10:30:00Z",
     isRead: false,
     priority: "high"

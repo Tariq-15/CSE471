@@ -16,7 +16,8 @@ from routes import (
     virtual_try_on_bp,
     upload_bp,
     size_charts_bp,
-    test_bp
+    test_bp,
+    otp_bp
 )
 
 app = Flask(__name__)
@@ -33,6 +34,7 @@ app.register_blueprint(virtual_try_on_bp)
 app.register_blueprint(upload_bp)
 app.register_blueprint(size_charts_bp)
 app.register_blueprint(test_bp)
+app.register_blueprint(otp_bp)
 
 
 if __name__ == '__main__':

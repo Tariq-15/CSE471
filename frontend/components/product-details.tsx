@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Star } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { getProduct, addToCart, getProductSizeChart, type Product, type SizeChartData } from "@/lib/api"
+import { getProduct, addToCart, getProductSizeChart, addToWishlist, removeFromWishlist, getWishlist, type Product, type SizeChartData } from "@/lib/api"
+import { toast } from "sonner"
 import { TrialRoom } from "@/components/trial-room"
 
 interface ProductDetailsProps {
@@ -28,7 +29,92 @@ export function ProductDetails({ productId }: ProductDetailsProps) {
   const [selectedImageIndex, setSelectedImageIndex] = useState(0)
   const [sizeStocks, setSizeStocks] = useState<SizeStock[]>([])
   const [sizeChartData, setSizeChartData] = useState<SizeChartData | null>(null)
+  const [isInWishlist, setIsInWishlist] = useState(false)
+  const [wishlistLoading, setWishlistLoading] = useState(false)
+  const [userId, setUserId] = useState<string | null>(null)
   const [loadingSizeChart, setLoadingSizeChart] = useState(false)
+
+  // Get user ID on mount
+  useEffect(() => {
+    const userData = localStorage.getItem('user')
+    const session = localStorage.getItem('session')
+    
+    let foundUserId: string | null = null
+    
+    if (userData) {
+      try {
+        const user = JSON.parse(userData)
+        foundUserId = user.id || user.user_id || null
+      } catch (e) {
+        console.error('Failed to parse user data:', e)
+      }
+    } else if (session) {
+      try {
+        const sessionData = JSON.parse(session)
+        foundUserId = sessionData.user_id || null
+      } catch (e) {
+        // Ignore
+      }
+    }
+    
+    if (foundUserId) {
+      setUserId(foundUserId)
+    }
+  }, [])
+
+  // Check if product is in wishlist
+  useEffect(() => {
+    if (userId && productId) {
+      checkWishlistStatus()
+    }
+  }, [userId, productId])
+
+  const checkWishlistStatus = async () => {
+    if (!userId) return
+    
+    try {
+      const response = await getWishlist(userId)
+      if (response.success && response.data) {
+        const isInList = response.data.some((item: any) => item.product_id === productId)
+        setIsInWishlist(isInList)
+      }
+    } catch (error) {
+      console.error('Failed to check wishlist:', error)
+    }
+  }
+
+  const handleWishlistToggle = async () => {
+    if (!userId) {
+      toast.error("Please login to add items to wishlist")
+      return
+    }
+
+    setWishlistLoading(true)
+    try {
+      if (isInWishlist) {
+        const response = await removeFromWishlist(userId, productId)
+        if (response.success) {
+          setIsInWishlist(false)
+          toast.success("Removed from wishlist")
+        } else {
+          toast.error(response.message || "Failed to remove from wishlist")
+        }
+      } else {
+        const response = await addToWishlist(userId, productId)
+        if (response.success) {
+          setIsInWishlist(true)
+          toast.success("Added to wishlist")
+        } else {
+          toast.error(response.message || "Failed to add to wishlist")
+        }
+      }
+    } catch (error) {
+      toast.error("An error occurred")
+      console.error(error)
+    } finally {
+      setWishlistLoading(false)
+    }
+  }
 
   useEffect(() => {
     async function fetchProduct() {
@@ -230,11 +316,11 @@ export function ProductDetails({ productId }: ProductDetailsProps) {
 
         {/* Price */}
         <div className="flex items-center gap-3 mb-6">
-          <span className="text-3xl font-bold">${product.price.toFixed(2)}</span>
+          <span className="text-3xl font-bold">৳{product.price.toFixed(2)}</span>
           {product.original_price && product.original_price > product.price && (
             <>
               <span className="text-2xl text-muted-foreground line-through">
-                ${product.original_price.toFixed(2)}
+                ৳{product.original_price.toFixed(2)}
               </span>
               <span className="bg-red-100 text-red-600 px-3 py-1 rounded-full text-sm font-semibold">
                 -{discountPercent}%
@@ -249,9 +335,14 @@ export function ProductDetails({ productId }: ProductDetailsProps) {
         )}
 
         {/* Add to Wishlist */}
-        <Button variant="outline" className="mb-6 gap-2 bg-transparent">
-          <Heart className="w-4 h-4" />
-          Add to Wish List
+        <Button 
+          variant="outline" 
+          className="mb-6 gap-2 bg-transparent"
+          onClick={handleWishlistToggle}
+          disabled={wishlistLoading || !userId}
+        >
+          <Heart className={`w-4 h-4 ${isInWishlist ? 'fill-red-500 text-red-500' : ''}`} />
+          {wishlistLoading ? "Loading..." : isInWishlist ? "Remove from Wishlist" : "Add to Wishlist"}
         </Button>
 
         {/* Size Chart Link - Only show if product has size chart */}
@@ -423,7 +514,7 @@ export function ProductDetails({ productId }: ProductDetailsProps) {
         {/* Shipping Info */}
         <div className="border border-border rounded-lg p-4 space-y-3 text-sm mb-6">
           <p>
-            Enjoy <strong>FREE express</strong> & <strong>Free Returns</strong> on orders over $50!
+            Enjoy <strong>FREE express</strong> & <strong>Free Returns</strong> on orders over ৳50!
           </p>
         </div>
 

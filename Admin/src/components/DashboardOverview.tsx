@@ -90,7 +90,7 @@ export function DashboardOverview() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-black">
-              ${stats?.total_revenue?.toLocaleString() || '0'}
+              ৳{stats?.total_revenue?.toLocaleString() || '0'}
             </div>
             <p className="text-xs text-[#576D64] mt-1">+12% from last month</p>
           </CardContent>

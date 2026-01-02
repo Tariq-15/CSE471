@@ -11,6 +11,7 @@ from .virtual_try_on import bp as virtual_try_on_bp
 from .upload import bp as upload_bp
 from .size_charts import bp as size_charts_bp
 from .test import bp as test_bp
+from .otp import bp as otp_bp
 
 __all__ = [
     'products_bp',
@@ -22,5 +23,6 @@ __all__ = [
     'virtual_try_on_bp',
     'upload_bp',
     'size_charts_bp',
-    'test_bp'
+    'test_bp',
+    'otp_bp'
 ]

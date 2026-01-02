@@ -181,7 +181,7 @@ export default function OrdersPage() {
                     </Badge>
                     <div className="flex items-center gap-2">
                       <DollarSign className="w-5 h-5 text-muted-foreground" />
-                      <span className="text-xl font-bold">${order.total.toFixed(2)}</span>
+                      <span className="text-xl font-bold">৳{order.total.toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
@@ -217,8 +217,8 @@ export default function OrdersPage() {
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className="font-semibold">${(item.price * item.quantity).toFixed(2)}</p>
-                          <p className="text-sm text-muted-foreground">${item.price.toFixed(2)} each</p>
+                          <p className="font-semibold">৳{(item.price * item.quantity).toFixed(2)}</p>
+                          <p className="text-sm text-muted-foreground">৳{item.price.toFixed(2)} each</p>
                         </div>
                       </div>
                     ))}
@@ -246,21 +246,21 @@ export default function OrdersPage() {
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Subtotal</span>
-                        <span>${order.subtotal.toFixed(2)}</span>
+                        <span>৳{order.subtotal.toFixed(2)}</span>
                       </div>
                       {order.discount > 0 && (
                         <div className="flex justify-between text-red-600">
                           <span>Discount</span>
-                          <span>-${order.discount.toFixed(2)}</span>
+                          <span>-৳{order.discount.toFixed(2)}</span>
                         </div>
                       )}
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Delivery Fee</span>
-                        <span>${order.delivery_fee.toFixed(2)}</span>
+                        <span>৳{order.delivery_fee.toFixed(2)}</span>
                       </div>
                       <div className="flex justify-between pt-2 border-t border-border font-semibold">
                         <span>Total</span>
-                        <span>${order.total.toFixed(2)}</span>
+                        <span>৳{order.total.toFixed(2)}</span>
                       </div>
                     </div>
                   </div>

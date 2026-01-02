@@ -17,8 +17,8 @@ def get_products_filtered():
         category = request.args.get('category')
         min_price = request.args.get('min_price', type=float)
         max_price = request.args.get('max_price', type=float)
-        color = request.args.get('color')
         tag = request.args.get('tag')
+        search_query = request.args.get('q') or request.args.get('search')
         page = request.args.get('page', 1, type=int)
         limit = request.args.get('limit', 9, type=int)
         sort = request.args.get('sort', 'newest')
@@ -28,24 +28,31 @@ def get_products_filtered():
         query = supabase.table('products').select('id, name, price, image_urls, color, category, tags', count='exact')
         query = query.eq('status', 'active')
         
+        if search_query:
+            query = query.ilike('name', f'%{search_query}%')
         if category:
             query = query.eq('category', category)
         if min_price is not None:
             query = query.gte('price', min_price)
         if max_price is not None:
-            query = query.lte('price', max_price)
+            # If max_price is 99999, don't apply upper limit (show all products above min_price)
+            if max_price != 99999:
+                query = query.lte('price', max_price)
         
-        color_filter_applied = color is not None
         tag_filter_applied = tag is not None
         
         count_query = supabase.table('products').select('id', count='exact')
         count_query = count_query.eq('status', 'active')
+        if search_query:
+            count_query = count_query.ilike('name', f'%{search_query}%')
         if category:
             count_query = count_query.eq('category', category)
         if min_price is not None:
             count_query = count_query.gte('price', min_price)
         if max_price is not None:
-            count_query = count_query.lte('price', max_price)
+            # If max_price is 99999, don't apply upper limit
+            if max_price != 99999:
+                count_query = count_query.lte('price', max_price)
         total_count = count_query.execute().count
         
         if sort == 'price_high_low':
@@ -59,22 +66,11 @@ def get_products_filtered():
         else:
             query = query.order('created_at', desc=True)
         
-        fetch_limit = limit * 3 if (color_filter_applied or tag_filter_applied) else limit
+        fetch_limit = limit * 3 if tag_filter_applied else limit
         response = query.range(offset, offset + fetch_limit).execute()
         
         products_list = []
         for product in response.data:
-            if color_filter_applied:
-                product_colors = product.get('color', [])
-                if isinstance(product_colors, list):
-                    if color.lower() not in [c.lower() if isinstance(c, str) else str(c).lower() for c in product_colors]:
-                        continue
-                elif isinstance(product_colors, str):
-                    if product_colors.lower() != color.lower():
-                        continue
-                else:
-                    continue
-            
             if tag_filter_applied:
                 product_tags = product.get('tags', [])
                 if isinstance(product_tags, list):
@@ -131,21 +127,10 @@ def get_products_filtered():
             products_with_ratings.sort(key=lambda x: x[0], reverse=True)
             products_list = [p[1] for p in products_with_ratings]
         
-        if color_filter_applied or tag_filter_applied:
-            all_products = supabase.table('products').select('id, color, tags').execute()
+        if tag_filter_applied:
+            all_products = supabase.table('products').select('id, tags').execute()
             filtered_count = 0
             for p in all_products.data:
-                if color_filter_applied:
-                    p_colors = p.get('color', [])
-                    color_match = False
-                    if isinstance(p_colors, list):
-                        if color.lower() in [c.lower() if isinstance(c, str) else str(c).lower() for c in p_colors]:
-                            color_match = True
-                    elif isinstance(p_colors, str) and p_colors.lower() == color.lower():
-                        color_match = True
-                    if not color_match:
-                        continue
-                
                 if tag_filter_applied:
                     p_tags = p.get('tags', [])
                     tag_match = False
@@ -493,25 +478,19 @@ def get_related_products(product_id):
 
 @bp.route('/new-arrivals', methods=['GET'])
 def get_new_arrivals():
-    """Get 4 random New Arrival products"""
+    """Get 4 most recently added products"""
     try:
-        import random
+        limit = request.args.get('limit', 4, type=int)
         
-        response = supabase.table('products').select('id, name, price, image_urls, color, tags').eq('status', 'active').execute()
+        # Get the most recently created products, ordered by created_at DESC
+        response = supabase.table('products')\
+            .select('id, name, price, image_urls, color, tags, created_at')\
+            .eq('status', 'active')\
+            .order('created_at', desc=True)\
+            .limit(limit)\
+            .execute()
         
-        new_arrival_products = []
-        for product in response.data:
-            product_tags = product.get('tags', [])
-            if isinstance(product_tags, list):
-                if any('new arrival' in str(t).lower() for t in product_tags):
-                    new_arrival_products.append(product)
-            elif isinstance(product_tags, str) and 'new arrival' in product_tags.lower():
-                new_arrival_products.append(product)
-        
-        if len(new_arrival_products) > 4:
-            selected_products = random.sample(new_arrival_products, 4)
-        else:
-            selected_products = new_arrival_products
+        selected_products = response.data or []
         
         products_list = []
         for product in selected_products:
@@ -537,7 +516,8 @@ def get_new_arrivals():
                 'id': product.get('id'),
                 'name': product.get('name', ''),
                 'rating': average_rating,
-                'image': images,
+                'image_urls': images,
+                'image_url': images[0] if images else None,
                 'price': float(product.get('price', 0))
             })
         
@@ -556,47 +536,74 @@ def get_new_arrivals():
 
 @bp.route('/best-selling', methods=['GET'])
 def get_best_selling_products():
-    """Get top 4 best selling products by sales"""
+    """Get top 4 best selling products by sales (only active products)"""
     try:
         limit = request.args.get('limit', 4, type=int)
-        
-        items_response = supabase.table('order_items').select('product_id, quantity').execute()
         from collections import defaultdict
+        
+        # Get all order items with their quantities
+        items_response = supabase.table('order_items').select('product_id, quantity').execute()
+        
+        # Count total sales per product
         sales_count = defaultdict(int)
         for item in (items_response.data or []):
-            sales_count[item['product_id']] += item.get('quantity', 1)
+            product_id = item.get('product_id')
+            quantity = item.get('quantity', 1)
+            if product_id:
+                sales_count[product_id] += quantity
         
-        top_product_ids = [pid for pid, _ in sorted(sales_count.items(), key=lambda x: x[1], reverse=True)[:limit]]
-        
-        if not top_product_ids:
+        # If no sales data, return empty (don't show random products)
+        if not sales_count:
             return jsonify({
                 "success": True,
                 "data": [],
                 "count": 0
             }), 200
         
+        # Sort by sales count descending
+        sorted_sales = sorted(sales_count.items(), key=lambda x: x[1], reverse=True)
+        
+        # Fetch more product IDs than needed (limit * 3) to account for inactive products
+        fetch_limit = max(limit * 3, 20)  # Fetch at least 3x the limit or 20, whichever is larger
+        candidate_product_ids = [pid for pid, _ in sorted_sales[:fetch_limit]]
+        
+        if not candidate_product_ids:
+            return jsonify({
+                "success": True,
+                "data": [],
+                "count": 0
+            }), 200
+        
+        # Fetch product details for candidate products, filtering for active status
         products_response = supabase.table('products')\
             .select('id, name, price, image_urls, color, tags')\
             .eq('status', 'active')\
-            .in_('id', top_product_ids)\
+            .in_('id', candidate_product_ids)\
             .execute()
         
-        products_map = {p['id']: p for p in products_response.data}
+        # Create a map for quick lookup
+        products_map = {p['id']: p for p in (products_response.data or [])}
         
+        # Build products list, maintaining sales order, but only including active products
         products_list = []
-        for product_id in top_product_ids:
+        for product_id, sales_qty in sorted_sales:
+            if len(products_list) >= limit:
+                break
+                
             product = products_map.get(product_id)
             if not product:
-                continue
+                continue  # Skip inactive or missing products
             
+            # Get average rating from reviews
             reviews_response = supabase.table('reviews')\
                 .select('rating')\
                 .eq('product_id', product_id)\
                 .execute()
             
-            ratings = [r['rating'] for r in reviews_response.data if r.get('rating')]
+            ratings = [r['rating'] for r in (reviews_response.data or []) if r.get('rating')]
             average_rating = round(sum(ratings) / len(ratings), 1) if ratings else 0.0
             
+            # Handle image URLs
             image_urls = product.get('image_urls', [])
             if isinstance(image_urls, list):
                 images = image_urls[:2]
@@ -609,9 +616,10 @@ def get_best_selling_products():
                 'id': product.get('id'),
                 'name': product.get('name', ''),
                 'rating': average_rating,
-                'image': images,
+                'image_urls': images,
+                'image_url': images[0] if images else None,
                 'price': float(product.get('price', 0)),
-                'sales': sales_count.get(product_id, 0)
+                'sales': sales_qty
             })
         
         return jsonify({
@@ -744,7 +752,6 @@ def get_all_products():
         category = request.args.get('category')
         min_price = request.args.get('min_price', type=float)
         max_price = request.args.get('max_price', type=float)
-        color = request.args.get('color')
         tag = request.args.get('tag')
         
         offset = (page - 1) * limit
@@ -757,9 +764,10 @@ def get_all_products():
         if min_price is not None:
             query = query.gte('price', min_price)
         if max_price is not None:
-            query = query.lte('price', max_price)
+            # If max_price is 99999, don't apply upper limit (show all products above min_price)
+            if max_price != 99999:
+                query = query.lte('price', max_price)
         
-        color_filter_applied = color is not None
         tag_filter_applied = tag is not None
         
         count_query = supabase.table('products').select('id', count='exact')
@@ -769,48 +777,47 @@ def get_all_products():
         if min_price is not None:
             count_query = count_query.gte('price', min_price)
         if max_price is not None:
-            count_query = count_query.lte('price', max_price)
-        
-        fetch_limit = limit * 3 if (color_filter_applied or tag_filter_applied) else limit
+            # If max_price is 99999, don't apply upper limit
+            if max_price != 99999:
+                count_query = count_query.lte('price', max_price)
         
         sort_param = request.args.get('sort', 'newest')
-        if sort_param == 'price_high_low':
-            query = query.order('price', desc=True)
-        elif sort_param == 'price_low_high':
-            query = query.order('price', desc=False)
-        elif sort_param == 'newest':
-            query = query.order('created_at', desc=True)
-        elif sort_param == 'oldest':
-            query = query.order('created_at', desc=False)
-        elif sort_param == 'best_selling':
-            query = query.order('created_at', desc=True)
-        else:
-            query = query.order('created_at', desc=True)
         
-        response = query.range(offset, offset + fetch_limit).execute()
-        
-        sales_data = {}
+        # For best_selling, we need to fetch all products first, then sort by sales
         if sort_param == 'best_selling':
+            # Get sales data first
             items_response = supabase.table('order_items').select('product_id, quantity').execute()
             from collections import defaultdict
             sales_count = defaultdict(int)
             for item in (items_response.data or []):
-                sales_count[item['product_id']] += item.get('quantity', 1)
-            sales_data = dict(sales_count)
+                product_id = item.get('product_id')
+                quantity = item.get('quantity', 1)
+                if product_id:
+                    sales_count[product_id] += quantity
+            
+            # Fetch all products matching filters (without ordering, we'll sort by sales later)
+            # Use a large limit to get all products, then we'll paginate after sorting
+            fetch_limit = 1000  # Fetch up to 1000 products for best_selling sort
+            response = query.order('created_at', desc=True).range(0, fetch_limit - 1).execute()
+        else:
+            # For other sorts, use normal pagination
+            if sort_param == 'price_high_low':
+                query = query.order('price', desc=True)
+            elif sort_param == 'price_low_high':
+                query = query.order('price', desc=False)
+            elif sort_param == 'newest':
+                query = query.order('created_at', desc=True)
+            elif sort_param == 'oldest':
+                query = query.order('created_at', desc=False)
+            else:
+                query = query.order('created_at', desc=True)
+            
+            # Fetch more products to account for potential filtering
+            fetch_limit = limit * 3 if tag_filter_applied else limit * 2
+            response = query.range(offset, offset + fetch_limit - 1).execute()
         
         products_list = []
         for product in response.data:
-            if color_filter_applied:
-                product_colors = product.get('color', [])
-                if isinstance(product_colors, list):
-                    if color.lower() not in [c.lower() if isinstance(c, str) else str(c).lower() for c in product_colors]:
-                        continue
-                elif isinstance(product_colors, str):
-                    if product_colors.lower() != color.lower():
-                        continue
-                else:
-                    continue
-            
             if tag_filter_applied:
                 product_tags = product.get('tags', [])
                 if isinstance(product_tags, list):
@@ -843,26 +850,34 @@ def get_all_products():
                 'id': product.get('id'),
                 'name': product.get('name', ''),
                 'rating': average_rating,
-                'image': images,
+                'image_urls': images,
+                'image_url': images[0] if images else None,
+                'image': images,  # Keep for backward compatibility
                 'price': float(product.get('price', 0))
             }
             
             if sort_param == 'best_selling':
-                product_data['_sales_count'] = sales_data.get(product.get('id'), 0)
+                product_data['_sales_count'] = sales_count.get(product.get('id'), 0)
             
             products_list.append(product_data)
             
+            # For non-best_selling sorts, break when we have enough products
             if sort_param != 'best_selling' and len(products_list) >= limit:
                 break
         
+        # Sort by sales count for best_selling, then apply pagination
         if sort_param == 'best_selling':
             products_list.sort(key=lambda x: x.get('_sales_count', 0), reverse=True)
+            # Remove sales count from response
             for p in products_list:
                 p.pop('_sales_count', None)
-            products_list = products_list[:limit]
+            # Apply pagination after sorting
+            start_idx = offset
+            end_idx = offset + limit
+            products_list = products_list[start_idx:end_idx]
         
-        if tag_filter_applied or color_filter_applied:
-            all_products = supabase.table('products').select('id, tags, color, price, category').eq('status', 'active').execute()
+        if tag_filter_applied:
+            all_products = supabase.table('products').select('id, tags, price, category').eq('status', 'active').execute()
             filtered_count = 0
             for p in all_products.data:
                 if category and p.get('category') != category:
@@ -871,19 +886,8 @@ def get_all_products():
                 product_price = float(p.get('price', 0))
                 if min_price is not None and product_price < min_price:
                     continue
-                if max_price is not None and product_price > max_price:
+                if max_price is not None and max_price != 99999 and product_price > max_price:
                     continue
-                
-                if color_filter_applied:
-                    p_colors = p.get('color', [])
-                    if isinstance(p_colors, list):
-                        if color.lower() not in [c.lower() if isinstance(c, str) else str(c).lower() for c in p_colors]:
-                            continue
-                    elif isinstance(p_colors, str):
-                        if p_colors.lower() != color.lower():
-                            continue
-                    else:
-                        continue
                 
                 if tag_filter_applied:
                     p_tags = p.get('tags', [])
@@ -923,7 +927,6 @@ def get_all_products():
                 "category": category,
                 "min_price": min_price,
                 "max_price": max_price,
-                "color": color,
                 "tag": tag
             }
         }), 200

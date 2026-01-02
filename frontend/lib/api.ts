@@ -87,6 +87,7 @@ export async function getProducts(params?: {
   maxPrice?: number
   sort?: string
   search?: string
+  tag?: string
 }): Promise<ApiResponse<Product[]>> {
   try {
     const queryParams = new URLSearchParams()
@@ -97,6 +98,7 @@ export async function getProducts(params?: {
     if (params?.maxPrice) queryParams.append('max_price', params.maxPrice.toString())
     if (params?.sort) queryParams.append('sort', params.sort)
     if (params?.search) queryParams.append('q', params.search)
+    if (params?.tag) queryParams.append('tag', params.tag)
 
     const response = await fetch(`${API_BASE_URL}/products?${queryParams.toString()}`)
     const data = await response.json()
@@ -124,7 +126,8 @@ export async function getProduct(productId: string): Promise<ApiResponse<Product
 
 export async function getNewArrivals(): Promise<ApiResponse<Product[]>> {
   try {
-    const response = await fetch(`${API_BASE_URL}/products/new-arrivals`)
+    // Use the same API as Product Page with sort=newest
+    const response = await fetch(`${API_BASE_URL}/products?sort=newest&limit=4&page=1`)
     const data = await response.json()
     return data
   } catch (error) {
@@ -150,7 +153,7 @@ export async function getBestSelling(): Promise<ApiResponse<Product[]>> {
 
 export async function getTopSelling(): Promise<ApiResponse<Product[]>> {
   try {
-    const response = await fetch(`${API_BASE_URL}/products/best-selling`)
+    const response = await fetch(`${API_BASE_URL}/products/best-selling?limit=4`)
     const data = await response.json()
     return data
   } catch (error) {
@@ -352,6 +355,122 @@ export async function createOrder(order: CreateOrderRequest): Promise<ApiRespons
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to create order'
+    }
+  }
+}
+
+// OTP API
+export async function sendOTP(phoneNumber: string): Promise<ApiResponse<{ phone_number: string; expires_in: number }>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/otp/send`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ phone_number: phoneNumber })
+    })
+    const data = await response.json()
+    return data
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to send OTP'
+    }
+  }
+}
+
+export async function verifyOTP(phoneNumber: string, otp: string): Promise<ApiResponse<{ phone_number: string; verified: boolean }>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/otp/verify`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ phone_number: phoneNumber, otp: otp })
+    })
+    const data = await response.json()
+    return data
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to verify OTP'
+    }
+  }
+}
+
+export async function checkOTPVerification(phoneNumber: string): Promise<ApiResponse<{ verified: boolean }>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/otp/check-verification`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ phone_number: phoneNumber })
+    })
+    const data = await response.json()
+    return data
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to check verification'
+    }
+  }
+}
+
+// Wishlist API
+export interface WishlistItem {
+  id: string
+  product_id: string
+  name: string
+  price: number
+  image: string
+  rating: number
+  created_at: string
+}
+
+export async function getWishlist(userId: string): Promise<ApiResponse<WishlistItem[]>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/user/wishlist?user_id=${userId}`)
+    const data = await response.json()
+    return data
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to fetch wishlist'
+    }
+  }
+}
+
+export async function addToWishlist(userId: string, productId: string): Promise<ApiResponse<any>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/user/wishlist`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ user_id: userId, product_id: productId })
+    })
+    const data = await response.json()
+    return data
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to add to wishlist'
+    }
+  }
+}
+
+export async function removeFromWishlist(userId: string, productId: string): Promise<ApiResponse<void>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/user/wishlist?user_id=${userId}&product_id=${productId}`, {
+      method: 'DELETE'
+    })
+    const data = await response.json()
+    return data
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to remove from wishlist'
     }
   }
 }

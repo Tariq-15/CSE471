@@ -40,6 +40,17 @@ def create_order():
                 "message": f"Missing required customer fields: {', '.join(missing_fields)}"
             }), 400
         
+        # Verify OTP
+        phone_number = customer_data.get('phone_number')
+        from utils.otp_utils import is_phone_verified
+        
+        is_verified, message = is_phone_verified(phone_number)
+        if not is_verified:
+            return jsonify({
+                "success": False,
+                "message": message
+            }), 400
+        
         cart_response = supabase.table('cart_items')\
             .select('*, products(name, image_url, image_urls)')\
             .eq('session_id', session_id)\

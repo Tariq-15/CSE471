@@ -4,8 +4,8 @@ import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Tag, ArrowRight, Loader2 } from "lucide-react"
-import { createOrder, validatePromoCode } from "@/lib/api"
+import { Tag, ArrowRight, Loader2, Shield } from "lucide-react"
+import { createOrder, validatePromoCode, sendOTP, verifyOTP } from "@/lib/api"
 import { toast } from "sonner"
 
 interface OrderSummaryProps {
@@ -20,6 +20,12 @@ export function OrderSummary({ sessionId, cartData, deliveryData }: OrderSummary
   const [appliedPromoCode, setAppliedPromoCode] = useState<any>(null)
   const [applyingPromo, setApplyingPromo] = useState(false)
   const [processing, setProcessing] = useState(false)
+  const [otpSent, setOtpSent] = useState(false)
+  const [otpVerified, setOtpVerified] = useState(false)
+  const [otp, setOtp] = useState("")
+  const [sendingOtp, setSendingOtp] = useState(false)
+  const [verifyingOtp, setVerifyingOtp] = useState(false)
+  const [otpTimer, setOtpTimer] = useState(0)
 
   // Calculate totals from cart data
   const subtotal = cartData?.subtotal || 0
@@ -119,6 +125,73 @@ export function OrderSummary({ sessionId, cartData, deliveryData }: OrderSummary
     return true
   }
 
+  // OTP Timer countdown
+  useEffect(() => {
+    if (otpTimer > 0) {
+      const interval = setInterval(() => {
+        setOtpTimer((prev) => prev - 1)
+      }, 1000)
+      return () => clearInterval(interval)
+    }
+  }, [otpTimer])
+
+  const handleSendOTP = async () => {
+    if (!isFormValid()) {
+      return
+    }
+
+    if (!deliveryData?.phone_number) {
+      toast.error("Please enter your phone number")
+      return
+    }
+
+    setSendingOtp(true)
+    try {
+      const response = await sendOTP(deliveryData.phone_number)
+      if (response.success) {
+        setOtpSent(true)
+        setOtpTimer(300) // 5 minutes
+        toast.success("OTP sent to your phone number")
+      } else {
+        toast.error(response.message || "Failed to send OTP")
+      }
+    } catch (error) {
+      toast.error("Failed to send OTP")
+      console.error(error)
+    } finally {
+      setSendingOtp(false)
+    }
+  }
+
+  const handleVerifyOTP = async () => {
+    if (!otp || otp.length !== 4) {
+      toast.error("Please enter a valid 4-digit OTP")
+      return
+    }
+
+    if (!deliveryData?.phone_number) {
+      toast.error("Phone number is required")
+      return
+    }
+
+    setVerifyingOtp(true)
+    try {
+      const response = await verifyOTP(deliveryData.phone_number, otp)
+      if (response.success && response.data?.verified) {
+        setOtpVerified(true)
+        toast.success("Phone number verified successfully!")
+      } else {
+        toast.error(response.message || "Invalid OTP")
+        setOtp("") // Clear OTP on failure
+      }
+    } catch (error) {
+      toast.error("Failed to verify OTP")
+      console.error(error)
+    } finally {
+      setVerifyingOtp(false)
+    }
+  }
+
   const handleProceed = async () => {
     if (!isFormValid()) {
       return
@@ -126,6 +199,12 @@ export function OrderSummary({ sessionId, cartData, deliveryData }: OrderSummary
 
     if (!cartData || !cartData.items || cartData.items.length === 0) {
       toast.error("Your cart is empty")
+      return
+    }
+
+    // Check OTP verification
+    if (!otpVerified) {
+      toast.error("Please verify your phone number with OTP first")
       return
     }
 
@@ -198,23 +277,23 @@ export function OrderSummary({ sessionId, cartData, deliveryData }: OrderSummary
       <div className="space-y-4 mb-6">
         <div className="flex justify-between text-muted-foreground">
           <span>Subtotal</span>
-          <span className="font-semibold text-foreground">${subtotal.toFixed(2)}</span>
+          <span className="font-semibold text-foreground">৳{subtotal.toFixed(2)}</span>
         </div>
         {appliedPromoCode && discount > 0 && (
           <div className="flex justify-between text-muted-foreground">
             <span>Discount {appliedPromoCode?.type === 'percentage' ? `(-${appliedPromoCode.discount}%)` : `(${appliedPromoCode.code})`}</span>
-            <span className="font-semibold text-red-500">-${discount.toFixed(2)}</span>
+            <span className="font-semibold text-red-500">-৳{discount.toFixed(2)}</span>
           </div>
         )}
         <div className="flex justify-between text-muted-foreground">
           <span>Delivery Fee</span>
-          <span className="font-semibold text-foreground">${deliveryFee.toFixed(2)}</span>
+          <span className="font-semibold text-foreground">৳{deliveryFee.toFixed(2)}</span>
         </div>
 
         <div className="border-t border-border pt-4">
           <div className="flex justify-between text-lg">
             <span className="font-semibold">Total</span>
-            <span className="font-bold">${total.toFixed(2)}</span>
+            <span className="font-bold">৳{total.toFixed(2)}</span>
           </div>
         </div>
       </div>
@@ -251,12 +330,94 @@ export function OrderSummary({ sessionId, cartData, deliveryData }: OrderSummary
         )}
       </div>
 
+      {/* OTP Verification Section */}
+      {deliveryData?.phone_number && (
+        <div className="mb-6 p-4 border border-border rounded-lg bg-muted/50">
+          <div className="flex items-center gap-2 mb-3">
+            <Shield className="h-4 w-4 text-primary" />
+            <h3 className="font-semibold text-sm">Phone Verification</h3>
+          </div>
+          
+          {!otpSent ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={handleSendOTP}
+              disabled={sendingOtp || !deliveryData?.isPhoneNumberValid}
+            >
+              {sendingOtp ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Sending OTP...
+                </>
+              ) : (
+                "Send OTP to Verify Phone"
+              )}
+            </Button>
+          ) : !otpVerified ? (
+            <div className="space-y-3">
+              <div className="text-sm text-muted-foreground mb-2">
+                Enter the 4-digit OTP sent to {deliveryData.phone_number}
+                {otpTimer > 0 && (
+                  <span className="ml-2 text-primary">
+                    (Resend in {Math.floor(otpTimer / 60)}:{(otpTimer % 60).toString().padStart(2, '0')})
+                  </span>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  type="text"
+                  placeholder="Enter OTP"
+                  value={otp}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/\D/g, '').slice(0, 4)
+                    setOtp(value)
+                  }}
+                  maxLength={4}
+                  className="flex-1 text-center text-lg tracking-widest"
+                  disabled={verifyingOtp}
+                />
+                <Button
+                  type="button"
+                  onClick={handleVerifyOTP}
+                  disabled={verifyingOtp || otp.length !== 4}
+                >
+                  {verifyingOtp ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    "Verify"
+                  )}
+                </Button>
+              </div>
+              {otpTimer === 0 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="w-full"
+                  onClick={handleSendOTP}
+                  disabled={sendingOtp}
+                >
+                  {sendingOtp ? "Sending..." : "Resend OTP"}
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-sm text-green-600">
+              <Shield className="h-4 w-4" />
+              <span>Phone number verified ✓</span>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Proceed Button */}
       <Button 
         className="w-full h-12 text-base" 
         size="lg"
         onClick={handleProceed}
-        disabled={processing || !cartData || cartData.items?.length === 0}
+        disabled={processing || !cartData || cartData.items?.length === 0 || !otpVerified}
       >
         {processing ? (
           <>
@@ -265,7 +426,7 @@ export function OrderSummary({ sessionId, cartData, deliveryData }: OrderSummary
           </>
         ) : (
           <>
-            Proceed
+            Confirm Order
             <ArrowRight className="ml-2 h-5 w-5" />
           </>
         )}

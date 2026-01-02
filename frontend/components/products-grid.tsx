@@ -96,15 +96,17 @@ export function ProductsGrid() {
         const minPrice = searchParams.get('min_price')
         const maxPrice = searchParams.get('max_price')
         const category = searchParams.get('category')
+        const searchQuery = searchParams.get('q')
         
         const response = await getProducts({
           page: currentPage,
           limit: limit,
           sort: backendSort,
           tag: tag || undefined,
-          min_price: minPrice ? Number(minPrice) : undefined,
-          max_price: maxPrice ? Number(maxPrice) : undefined,
-          category: category || undefined
+          minPrice: minPrice ? Number(minPrice) : undefined,
+          maxPrice: maxPrice ? Number(maxPrice) : undefined,
+          category: category || undefined,
+          search: searchQuery || undefined
         })
         
         if (response.success && response.data) {
@@ -122,7 +124,7 @@ export function ProductsGrid() {
     }
     
     fetchProducts()
-  }, [currentPage, sortBy, searchParams])
+  }, [currentPage, sortBy, searchParams.toString()])
 
   const formatProductForCard = (product: Product) => {
     // Handle different image field names from backend

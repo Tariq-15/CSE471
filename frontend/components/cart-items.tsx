@@ -161,7 +161,7 @@ export function CartItems({ sessionId, onCartUpdate, onCartDataChange }: CartIte
 
                 {/* Price and Quantity */}
                 <div className="flex items-center justify-between mt-4">
-                  <p className="text-xl font-bold">${item.price.toFixed(2)}</p>
+                  <p className="text-xl font-bold">৳{item.price.toFixed(2)}</p>
 
                   {/* Quantity Controls */}
                   <div className="flex items-center gap-3 bg-background rounded-full px-3 py-1.5 border border-border">

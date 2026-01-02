@@ -149,7 +149,7 @@ export function DiscountsManagement() {
                   <Input id="usage-limit" type="number" placeholder="100" />
                 </div>
                 <div>
-                  <Label htmlFor="min-order">Min Order Value ($)</Label>
+                  <Label htmlFor="min-order">Min Order Value (৳)</Label>
                   <Input id="min-order" type="number" placeholder="50" />
                 </div>
               </div>
@@ -219,12 +219,12 @@ export function DiscountsManagement() {
                     </div>
                   </TableCell>
                   <TableCell className="text-black font-medium">
-                    {discount.discount}{discount.type === 'percentage' ? '%' : '$'} off
+                    {discount.discount}{discount.type === 'percentage' ? '%' : '৳'} off
                   </TableCell>
                   <TableCell className="text-gray-600">
                     {discount.usageCount} / {discount.usageLimit}
                   </TableCell>
-                  <TableCell className="text-gray-600">${discount.minOrderValue}</TableCell>
+                  <TableCell className="text-gray-600">৳{discount.minOrderValue}</TableCell>
                   <TableCell className="text-gray-600">{formatDate(discount.expirationDate)}</TableCell>
                   <TableCell>{getStatusBadge(discount.status, discount.expirationDate)}</TableCell>
                   <TableCell>

@@ -17,6 +17,7 @@ import { NotificationsManagement } from "./components/NotificationsManagement";
 import { UserSettings } from "./components/UserSettings";
 import { SizeChartManagement } from "./components/SizeChartManagement";
 import { CategoryManagement } from "./components/CategoryManagement";
+import { Toaster } from "./components/ui/sonner";
 
 export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -73,6 +74,7 @@ export default function App() {
           </Routes>
         </main>
       </div>
+      <Toaster />
     </div>
   );
 }

@@ -224,7 +224,7 @@ export function OrdersManagement() {
                       <TableCell className="text-gray-600">{formatDate(order.date || order.created_at)}</TableCell>
                       <TableCell>{getStatusBadge(order.status)}</TableCell>
                       <TableCell className="text-gray-600">{order.items_count || 0} items</TableCell>
-                      <TableCell className="font-medium text-black">${order.total?.toFixed(2) || '0.00'}</TableCell>
+                      <TableCell className="font-medium text-black">৳{order.total?.toFixed(2) || '0.00'}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Button 

@@ -1,7 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Search, Heart, ShoppingCart, User, LogIn, LogOut, UserCircle, Package, Settings } from "lucide-react"
+import { useRouter, usePathname, useSearchParams } from "next/navigation"
+import { Search, Heart, ShoppingCart, User, LogIn, LogOut, UserCircle, Package } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import Link from "next/link"
@@ -16,9 +17,23 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 export function Header() {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [userName, setUserName] = useState<string | null>(null)
+  const [searchTerm, setSearchTerm] = useState("")
+  
+  // Update search term when URL search query changes
+  useEffect(() => {
+    if (pathname === '/products') {
+      const query = searchParams.get('q')
+      setSearchTerm(query || "")
+    } else {
+      setSearchTerm("")
+    }
+  }, [pathname, searchParams])
 
   useEffect(() => {
     // Check if user is logged in (check localStorage or session)
@@ -73,6 +88,30 @@ export function Header() {
     return 'U'
   }
 
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (searchTerm.trim()) {
+      router.push(`/products?q=${encodeURIComponent(searchTerm.trim())}&page=1`)
+      setSearchTerm("")
+    } else {
+      // If search is empty, go to products page without query
+      router.push('/products?page=1')
+    }
+  }
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      if (searchTerm.trim()) {
+        router.push(`/products?q=${encodeURIComponent(searchTerm.trim())}&page=1`)
+        setSearchTerm("")
+      } else {
+        // If search is empty, go to products page without query
+        router.push('/products?page=1')
+      }
+    }
+  }
+
   return (
     <header className="border-b border-border">
       <div className="container mx-auto px-4 py-4">
@@ -93,25 +132,30 @@ export function Header() {
               <Link href="/products?tag=New Arrival" className="text-sm font-medium hover:opacity-70 transition-opacity">
                 New Arrivals
               </Link>
-              <Link href="/products" className="text-sm font-medium hover:opacity-70 transition-opacity">
-                Categories
+              <Link href="/orders" className="text-sm font-medium hover:opacity-70 transition-opacity">
+                My Orders
               </Link>
             </nav>
           </div>
 
           {/* Search and Icons */}
           <div className="flex items-center gap-4">
-            <div className="hidden lg:flex items-center gap-2 bg-muted rounded-full px-4 py-2 max-w-md w-full">
+            <form onSubmit={handleSearch} className="hidden lg:flex items-center gap-2 bg-muted rounded-full px-4 py-2 max-w-md w-full">
               <Search className="w-4 h-4 text-muted-foreground" />
               <Input
                 placeholder="Search for products..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
                 className="border-0 bg-transparent p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0"
               />
-            </div>
+            </form>
 
-            <Button variant="ghost" size="icon" className="rounded-full">
-              <Heart className="w-5 h-5" />
-            </Button>
+            <Link href="/wishlist">
+              <Button variant="ghost" size="icon" className="rounded-full">
+                <Heart className="w-5 h-5" />
+              </Button>
+            </Link>
             <Link href="/checkout">
               <Button variant="ghost" size="icon" className="rounded-full">
                 <ShoppingCart className="w-5 h-5" />
@@ -154,12 +198,6 @@ export function Header() {
                       <Link href="/orders" className="flex items-center cursor-pointer">
                         <Package className="mr-2 h-4 w-4" />
                         <span>My Orders</span>
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/profile/settings" className="flex items-center cursor-pointer">
-                        <Settings className="mr-2 h-4 w-4" />
-                        <span>Settings</span>
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />

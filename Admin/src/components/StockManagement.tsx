@@ -245,7 +245,7 @@ export function StockManagement() {
                 <div className="pt-2 border-t">
                   <div className="flex justify-between">
                     <span className="text-sm text-gray-600">Value</span>
-                    <span className="font-medium text-black">${category.value.toLocaleString()}</span>
+                    <span className="font-medium text-black">৳{category.value.toLocaleString()}</span>
                   </div>
                 </div>
               </CardContent>
