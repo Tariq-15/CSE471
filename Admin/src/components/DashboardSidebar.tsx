@@ -4,7 +4,6 @@ import {
   Package, 
   ShoppingCart, 
   Users, 
-  TrendingUp, 
   Ruler, 
   Percent, 
   Settings,
@@ -25,7 +24,6 @@ const navigationItems = [
   { id: 'customers', label: 'Customers', icon: Users, path: '/customers' },
   { id: 'categories', label: 'Categories', icon: Folder, path: '/categories' },
   { id: 'sizecharts', label: 'Size Charts', icon: Ruler, path: '/sizecharts' },
-  { id: 'analytics', label: 'Analytics', icon: TrendingUp, path: '/analytics' },
   { id: 'discounts', label: 'Discounts', icon: Percent, path: '/discounts' },
   { id: 'settings', label: 'Settings', icon: Settings, path: '/settings' },
 ];

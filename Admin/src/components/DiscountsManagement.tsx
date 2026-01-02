@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
 import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { Plus, Search, Edit, Trash2, Copy, Percent } from "lucide-react";
+import { Plus, Search, Edit, Trash2, Copy } from "lucide-react";
 
 const mockDiscounts = [
   {
@@ -171,45 +171,6 @@ export function DiscountsManagement() {
             </div>
           </DialogContent>
         </Dialog>
-      </div>
-
-      {/* Active Promotions Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2">
-              <Percent className="w-5 h-5 text-[#576D64]" />
-              <div>
-                <div className="text-2xl font-bold text-black">
-                  {discounts.filter(d => d.status === 'active').length}
-                </div>
-                <div className="text-sm text-gray-600">Active Discounts</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-black">
-              {discounts.reduce((sum, d) => sum + d.usageCount, 0)}
-            </div>
-            <div className="text-sm text-gray-600">Total Uses</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-green-600">$12,450</div>
-            <div className="text-sm text-gray-600">Discount Value Given</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-[#576D64]">
-              {discounts.filter(d => new Date(d.expirationDate) < new Date()).length}
-            </div>
-            <div className="text-sm text-gray-600">Expired Codes</div>
-          </CardContent>
-        </Card>
       </div>
 
       <Card>

@@ -19,10 +19,7 @@ downloads/
 eggs/
 .eggs/
 # lib/ - but allow Admin/src/lib and frontend/lib
-!Admin/src/lib/
-!frontend/# lib/ - but allow Admin/src/lib and frontend/lib
-!Admin/src/lib/
-!frontend/lib/
+
 lib64/
 parts/
 sdist/
@@ -72,4 +69,3 @@ pnpm-debug.log*
 # Testing
 coverage/
 .nyc_output/
-

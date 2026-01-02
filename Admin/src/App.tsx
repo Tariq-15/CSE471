@@ -11,7 +11,6 @@ import { CustomersManagement } from "./components/CustomersManagement";
 import { CustomerDetail } from "./components/CustomerDetail";
 import { SuppliersManagement } from "./components/SuppliersManagement";
 import { SupplierDetail } from "./components/SupplierDetail";
-import { Analytics } from "./components/Analytics";
 import { StockManagement } from "./components/StockManagement";
 import { DiscountsManagement } from "./components/DiscountsManagement";
 import { NotificationsManagement } from "./components/NotificationsManagement";
@@ -31,7 +30,6 @@ export default function App() {
     if (path.startsWith('/orders')) return 'orders';
     if (path.startsWith('/customers')) return 'customers';
     if (path.startsWith('/suppliers')) return 'suppliers';
-    if (path.startsWith('/analytics')) return 'analytics';
     if (path.startsWith('/stock')) return 'stock';
     if (path.startsWith('/discounts')) return 'discounts';
     if (path.startsWith('/sizecharts')) return 'sizecharts';
@@ -65,7 +63,6 @@ export default function App() {
             <Route path="/customers/:id" element={<CustomerDetail />} />
             <Route path="/suppliers" element={<SuppliersManagement />} />
             <Route path="/suppliers/:id" element={<SupplierDetail />} />
-            <Route path="/analytics" element={<Analytics />} />
             <Route path="/stock" element={<StockManagement />} />
             <Route path="/discounts" element={<DiscountsManagement />} />
             <Route path="/sizecharts" element={<SizeChartManagement />} />

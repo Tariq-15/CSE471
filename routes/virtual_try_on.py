@@ -78,7 +78,7 @@ def virtual_try_on():
             }), 400
         
         prompt = (
-            """Take the T-shirt pattern/design from the second image and composite it onto the person in the first image, 
+            """Take the clothing from the second image and composite it onto the person in the first image, 
 as if the person is realistically wearing that T-shirt. Ensure correct texture, folds, and lighting. 
 The final image should only show the person wearing the new shirt.
 
