@@ -91,13 +91,37 @@ def admin_size_chart_add_row(template_id):
     """Add a row to size chart"""
     try:
         data = request.json
+        if not data:
+            return jsonify({"success": False, "error": "Request body is required"}), 400
+        
+        size_label = data.get('size_label')
+        if not size_label or not size_label.strip():
+            return jsonify({"success": False, "error": "size_label is required"}), 400
+        
+        # Verify template exists
+        template_check = supabase.table('size_chart_templates').select('id').eq('id', template_id).execute()
+        if not template_check.data:
+            return jsonify({"success": False, "error": f"Template with id {template_id} not found"}), 404
+        
+        # Get max sort_order for this template to append at the end
+        existing_rows = supabase.table('size_chart_rows').select('sort_order').eq('template_id', template_id).order('sort_order', desc=True).limit(1).execute()
+        max_sort_order = existing_rows.data[0]['sort_order'] if existing_rows.data else -1
+        sort_order = data.get('sort_order', max_sort_order + 1)
+        
         response = supabase.table('size_chart_rows').insert({
             'template_id': template_id,
-            'size_label': data.get('size_label'),
-            'sort_order': data.get('sort_order', 0)
+            'size_label': size_label.strip(),
+            'sort_order': int(sort_order)
         }).execute()
-        return jsonify({"success": True, "data": response.data[0] if response.data else None}), 201
+        
+        if not response.data:
+            return jsonify({"success": False, "error": "Failed to create row"}), 500
+        
+        return jsonify({"success": True, "data": response.data[0]}), 201
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Error adding size chart row: {error_trace}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
