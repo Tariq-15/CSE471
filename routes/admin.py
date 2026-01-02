@@ -25,7 +25,13 @@ def admin_products():
             if search:
                 query = query.ilike('name', f'%{search}%')
             if category:
-                query = query.eq('category', category)
+                # Support both category name (legacy) and category_id
+                try:
+                    category_id = int(category)
+                    query = query.eq('category_id', category_id)
+                except ValueError:
+                    # If not a number, treat as category name
+                    query = query.eq('category', category)
             
             response = query.order('created_at', desc=True).range(offset, offset + limit - 1).execute()
             
@@ -42,10 +48,35 @@ def admin_products():
         
         elif request.method == 'POST':
             data = request.json
+            category_name = data.get('category')
+            category_id = data.get('category_id')
+            
+            # Handle category: if category_id is provided, use it; otherwise look up by name
+            if category_id:
+                # Verify category exists
+                cat_check = supabase.table('categories').select('id, name').eq('id', category_id).execute()
+                if not cat_check.data:
+                    return jsonify({"success": False, "error": f"Category with ID {category_id} not found"}), 400
+                category_id = cat_check.data[0]['id']
+                category_name = cat_check.data[0]['name']
+            elif category_name:
+                # Look up category by name
+                cat_check = supabase.table('categories').select('id, name').eq('name', category_name).execute()
+                if cat_check.data:
+                    category_id = cat_check.data[0]['id']
+                    category_name = cat_check.data[0]['name']
+                else:
+                    # Category doesn't exist, create it
+                    new_cat = supabase.table('categories').insert({'name': category_name}).execute()
+                    if new_cat.data:
+                        category_id = new_cat.data[0]['id']
+                        category_name = new_cat.data[0]['name']
+            
             product_data = {
                 'name': data.get('name'),
                 'description': data.get('description', ''),
-                'category': data.get('category'),
+                'category': category_name,  # Keep for backward compatibility
+                'category_id': category_id,
                 'price': data.get('price'),
                 'original_price': data.get('original_price'),
                 'image_url': data.get('image_url'),
@@ -152,7 +183,31 @@ def admin_product_detail(product_id):
         
         elif request.method == 'PUT':
             data = request.json
-            update_data = {k: v for k, v in data.items() if k not in ['size_stocks', 'size_chart_template_id'] and v is not None}
+            update_data = {k: v for k, v in data.items() if k not in ['size_stocks', 'size_chart_template_id', 'category', 'category_id'] and v is not None}
+            
+            # Handle category update: support both category_id and category name
+            if 'category_id' in data and data['category_id']:
+                category_id = data['category_id']
+                # Verify category exists and get name
+                cat_check = supabase.table('categories').select('id, name').eq('id', category_id).execute()
+                if cat_check.data:
+                    update_data['category_id'] = cat_check.data[0]['id']
+                    update_data['category'] = cat_check.data[0]['name']  # Keep for backward compatibility
+                else:
+                    return jsonify({"success": False, "error": f"Category with ID {category_id} not found"}), 400
+            elif 'category' in data and data['category']:
+                category_name = data['category']
+                # Look up category by name
+                cat_check = supabase.table('categories').select('id, name').eq('name', category_name).execute()
+                if cat_check.data:
+                    update_data['category_id'] = cat_check.data[0]['id']
+                    update_data['category'] = cat_check.data[0]['name']
+                else:
+                    # Category doesn't exist, create it
+                    new_cat = supabase.table('categories').insert({'name': category_name}).execute()
+                    if new_cat.data:
+                        update_data['category_id'] = new_cat.data[0]['id']
+                        update_data['category'] = new_cat.data[0]['name']
             
             if 'size_chart_template_id' in data:
                 template_id = data['size_chart_template_id']
@@ -444,10 +499,10 @@ def admin_categories():
             
             categories = []
             for cat in (response.data or []):
-                # Get product count for each category
+                # Get product count for each category using category_id
                 products_response = supabase.table('products')\
                     .select('id', count='exact')\
-                    .eq('category', cat['name'])\
+                    .eq('category_id', cat['id'])\
                     .execute()
                 
                 cat['products_count'] = products_response.count or 0
@@ -501,10 +556,10 @@ def admin_category_detail(category_id):
                 return jsonify({"success": False, "message": "Category not found"}), 404
             
             category = response.data[0]
-            # Get product count
+            # Get product count using category_id
             products_response = supabase.table('products')\
                 .select('id', count='exact')\
-                .eq('category', category['name'])\
+                .eq('category_id', category['id'])\
                 .execute()
             
             category['products_count'] = products_response.count or 0
@@ -534,20 +589,17 @@ def admin_category_detail(category_id):
                 return jsonify({"success": False, "error": "Failed to update category"}), 500
         
         elif request.method == 'DELETE':
-            # Check if category is used by any products
-            category_response = supabase.table('categories').select('name').eq('id', category_id).execute()
-            if category_response.data:
-                category_name = category_response.data[0]['name']
-                products_response = supabase.table('products')\
-                    .select('id', count='exact')\
-                    .eq('category', category_name)\
-                    .execute()
-                
-                if products_response.count and products_response.count > 0:
-                    return jsonify({
-                        "success": False,
-                        "error": f"Cannot delete category. It is used by {products_response.count} product(s)"
-                    }), 400
+            # Check if category is used by any products using category_id
+            products_response = supabase.table('products')\
+                .select('id', count='exact')\
+                .eq('category_id', category_id)\
+                .execute()
+            
+            if products_response.count and products_response.count > 0:
+                return jsonify({
+                    "success": False,
+                    "error": f"Cannot delete category. It is used by {products_response.count} product(s)"
+                }), 400
             
             supabase.table('categories').delete().eq('id', category_id).execute()
             return jsonify({"success": True, "message": "Category deleted"}), 200
