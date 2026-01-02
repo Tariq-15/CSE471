@@ -490,13 +490,13 @@ def add_product_review(product_id):
         
         response = supabase.table('reviews').insert(review_data).execute()
         
+        review_result = response.data[0] if response.data else {}
+        review_result['is_verified_purchase'] = is_verified
+        
         return jsonify({
             "success": True,
             "message": "Review added successfully",
-            "data": {
-                **response.data[0] if response.data else {},
-                "is_verified_purchase": is_verified
-            }
+            "data": review_result
         }), 201
             
     except Exception as e:
