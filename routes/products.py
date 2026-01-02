@@ -250,6 +250,20 @@ def get_product(product_id):
             else:
                 product_data['size_stocks'] = []
             
+            # Calculate average rating from reviews
+            try:
+                reviews_response = supabase.table('reviews')\
+                    .select('rating')\
+                    .eq('product_id', product_id)\
+                    .execute()
+                
+                ratings = [r['rating'] for r in reviews_response.data if r.get('rating')]
+                average_rating = round(sum(ratings) / len(ratings), 2) if ratings else 0.0
+                product_data['rating'] = average_rating
+            except Exception as e:
+                print(f"Warning: Could not calculate rating: {e}")
+                product_data['rating'] = 0.0
+            
             return jsonify({
                 "success": True,
                 "data": product_data
@@ -363,8 +377,10 @@ def get_product_size_chart(product_id):
 
 @bp.route('/<product_id>/reviews', methods=['GET'])
 def get_product_reviews(product_id):
-    """Get all reviews for a product"""
+    """Get all reviews for a product with verified purchase status"""
     try:
+        user_id = request.args.get('user_id')  # Optional user_id to check if they purchased
+        
         response = supabase.table('reviews')\
             .select('*')\
             .eq('product_id', product_id)\
@@ -372,10 +388,43 @@ def get_product_reviews(product_id):
             .order('created_at', desc=True)\
             .execute()
         
+        reviews = response.data or []
+        
+        # Check if user has purchased this product for each review
+        if user_id:
+            # Get all orders for this user
+            orders_response = supabase.table('orders')\
+                .select('id')\
+                .eq('user_id', user_id)\
+                .execute()
+            
+            order_ids = [o['id'] for o in (orders_response.data or [])]
+            
+            if order_ids:
+                # Check if any order_items contain this product
+                order_items_response = supabase.table('order_items')\
+                    .select('order_id')\
+                    .eq('product_id', product_id)\
+                    .in_('order_id', order_ids)\
+                    .execute()
+                
+                purchased_order_ids = {item['order_id'] for item in (order_items_response.data or [])}
+                
+                # Mark reviews as verified if the reviewer purchased
+                # We'll check by matching user_name with customer data from orders
+                for review in reviews:
+                    review['is_verified_purchase'] = len(purchased_order_ids) > 0
+            else:
+                for review in reviews:
+                    review['is_verified_purchase'] = False
+        else:
+            for review in reviews:
+                review['is_verified_purchase'] = False
+        
         return jsonify({
             "success": True,
-            "data": response.data,
-            "count": len(response.data)
+            "data": reviews,
+            "count": len(reviews)
         }), 200
             
     except Exception as e:
@@ -393,6 +442,7 @@ def add_product_review(product_id):
         user_name = data.get('user_name')
         rating = data.get('rating')
         comment = data.get('comment', '')
+        user_id = data.get('user_id')  # Optional user_id to verify purchase
         
         if not user_name or not rating:
             return jsonify({
@@ -405,6 +455,30 @@ def add_product_review(product_id):
                 "success": False,
                 "message": "Rating must be between 1 and 5"
             }), 400
+        
+        # Check if user has purchased this product
+        is_verified = False
+        if user_id:
+            try:
+                # Get all orders for this user
+                orders_response = supabase.table('orders')\
+                    .select('id')\
+                    .eq('user_id', user_id)\
+                    .execute()
+                
+                order_ids = [o['id'] for o in (orders_response.data or [])]
+                
+                if order_ids:
+                    # Check if any order_items contain this product
+                    order_items_response = supabase.table('order_items')\
+                        .select('order_id')\
+                        .eq('product_id', product_id)\
+                        .in_('order_id', order_ids)\
+                        .execute()
+                    
+                    is_verified = len(order_items_response.data or []) > 0
+            except Exception as e:
+                print(f"Warning: Could not verify purchase: {e}")
         
         review_data = {
             'product_id': product_id,
@@ -419,7 +493,10 @@ def add_product_review(product_id):
         return jsonify({
             "success": True,
             "message": "Review added successfully",
-            "review_id": response.data[0]['id'] if response.data else None
+            "data": {
+                **response.data[0] if response.data else {},
+                "is_verified_purchase": is_verified
+            }
         }), 201
             
     except Exception as e:

@@ -200,9 +200,12 @@ export async function getProductSizeChart(productId: string): Promise<ApiRespons
   }
 }
 
-export async function getProductReviews(productId: string): Promise<ApiResponse<Review[]>> {
+export async function getProductReviews(productId: string, userId?: string): Promise<ApiResponse<Review[]>> {
   try {
-    const response = await fetch(`${API_BASE_URL}/products/${productId}/reviews`)
+    const url = userId 
+      ? `${API_BASE_URL}/products/${productId}/reviews?user_id=${userId}`
+      : `${API_BASE_URL}/products/${productId}/reviews`
+    const response = await fetch(url)
     const data = await response.json()
     return data
   } catch (error) {
@@ -219,6 +222,7 @@ export async function addProductReview(
     user_name: string
     rating: number
     comment?: string
+    user_id?: string
   }
 ): Promise<ApiResponse<Review>> {
   try {
