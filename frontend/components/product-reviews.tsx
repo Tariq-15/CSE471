@@ -27,34 +27,69 @@ export function ProductReviews({ productId }: ProductReviewsProps) {
   const [userId, setUserId] = useState<string | null>(null)
 
   useEffect(() => {
-    // Get user_id from localStorage
+    // Get user_id from localStorage (check both 'user' and 'session' keys)
     const getUserData = () => {
       try {
-        const sessionData = localStorage.getItem('sb-session')
-        if (sessionData) {
-          const parsed = JSON.parse(sessionData)
-          const foundUserId = parsed?.user?.id || parsed?.user_id || null
+        const userData = localStorage.getItem('user')
+        const sessionData = localStorage.getItem('session')
+        
+        let foundUserId: string | null = null
+        let user: any = null
+        
+        // Try to get user_id from 'user' key first
+        if (userData) {
+          try {
+            const parsedUser = JSON.parse(userData)
+            foundUserId = parsedUser.id || parsedUser.user_id || null
+            user = parsedUser
+          } catch (e) {
+            console.error('Failed to parse user data:', e)
+          }
+        }
+        
+        // If not found, try 'session' key
+        if (!foundUserId && sessionData) {
+          try {
+            const parsedSession = JSON.parse(sessionData)
+            foundUserId = parsedSession.user?.id || parsedSession.user_id || null
+            user = parsedSession.user || parsedSession
+          } catch (e) {
+            console.error('Failed to parse session data:', e)
+          }
+        }
+        
+        if (foundUserId) {
           setUserId(foundUserId)
           
           // Fetch user profile to get name
-          if (foundUserId) {
-            getUserProfile(foundUserId).then((response) => {
-              if (response.success && response.data) {
-                const fullName = response.data.first_name && response.data.last_name
-                  ? `${response.data.first_name} ${response.data.last_name}`
-                  : response.data.first_name || response.data.last_name || "User"
-                setUserName(fullName)
-              }
-            }).catch(() => {
-              // If profile fetch fails, try to get from session
-              const user = parsed?.user
+          getUserProfile(foundUserId).then((response) => {
+            if (response.success && response.data) {
+              const fullName = response.data.first_name && response.data.last_name
+                ? `${response.data.first_name} ${response.data.last_name}`
+                : response.data.first_name || response.data.last_name || "User"
+              setUserName(fullName)
+            } else {
+              // If profile fetch fails, try to get from session/user metadata
               if (user?.user_metadata?.full_name) {
                 setUserName(user.user_metadata.full_name)
               } else if (user?.email) {
                 setUserName(user.email.split('@')[0])
+              } else if (user?.first_name || user?.last_name) {
+                const name = [user.first_name, user.last_name].filter(Boolean).join(' ')
+                if (name) setUserName(name)
               }
-            })
-          }
+            }
+          }).catch(() => {
+            // If profile fetch fails, try to get from session/user metadata
+            if (user?.user_metadata?.full_name) {
+              setUserName(user.user_metadata.full_name)
+            } else if (user?.email) {
+              setUserName(user.email.split('@')[0])
+            } else if (user?.first_name || user?.last_name) {
+              const name = [user.first_name, user.last_name].filter(Boolean).join(' ')
+              if (name) setUserName(name)
+            }
+          })
         }
       } catch (error) {
         console.error('Failed to get user data:', error)
