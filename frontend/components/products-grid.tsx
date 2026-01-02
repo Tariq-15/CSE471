@@ -141,7 +141,7 @@ export function ProductsGrid() {
       price: product.price,
       originalPrice: product.original_price || null,
       image: imageUrl,
-      rating: product.rating || 4.5,
+      rating: product.rating ?? 0,
     }
   }
 

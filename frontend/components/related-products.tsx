@@ -39,7 +39,7 @@ export function RelatedProducts({ productId }: RelatedProductsProps) {
     price: product.price,
     originalPrice: product.original_price || null,
     image: product.image?.[0] || product.image_urls?.[0] || product.image_url || "/placeholder.svg",
-    rating: product.rating || 4.0,
+    rating: product.rating ?? 0,
   })
 
   if (loading) {
