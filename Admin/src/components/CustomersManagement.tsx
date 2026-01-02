@@ -156,7 +156,14 @@ export function CustomersManagement() {
                       <TableCell className="text-gray-600">{customer.email || 'N/A'}</TableCell>
                       <TableCell className="text-gray-600">{formatDate(customer.joinDate || customer.created_at || '')}</TableCell>
                       <TableCell className="text-black font-medium">{customer.orders_count || 0}</TableCell>
-                      <TableCell className="text-black font-medium">${(customer.total_spent || 0).toFixed(2)}</TableCell>
+                      <TableCell className="text-black font-medium">
+                        ${(() => {
+                          const total = customer.total_spent;
+                          if (total === null || total === undefined) return '0.00';
+                          const num = typeof total === 'string' ? parseFloat(total) : Number(total);
+                          return isNaN(num) ? '0.00' : num.toFixed(2);
+                        })()}
+                      </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <Button 
@@ -222,7 +229,7 @@ export function CustomersManagement() {
         <Card>
           <CardContent className="p-4">
             <div className="text-2xl font-bold text-black">
-              ${(stats.total_revenue || customers.reduce((sum, c) => sum + (c.total_spent || 0), 0)).toFixed(0)}
+              ${(Number(stats.total_revenue) || customers.reduce((sum, c) => sum + (Number(c.total_spent) || 0), 0)).toFixed(0)}
             </div>
             <div className="text-sm text-gray-600">Total Revenue</div>
           </CardContent>
