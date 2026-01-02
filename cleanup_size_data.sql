@@ -36,3 +36,8 @@ GROUP BY p.id, p.name, p.size_chart_template_id
 HAVING COUNT(ps.id) > 0;
 
 
+
+
+
+
+
