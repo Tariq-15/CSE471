@@ -18,7 +18,11 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+# lib/ - but allow Admin/src/lib and frontend/lib
+!Admin/src/lib/
+!frontend/# lib/ - but allow Admin/src/lib and frontend/lib
+!Admin/src/lib/
+!frontend/lib/
 lib64/
 parts/
 sdist/
