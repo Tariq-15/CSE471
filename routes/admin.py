@@ -409,19 +409,25 @@ def admin_customers():
 def admin_customers_stats():
     """Get customer statistics"""
     try:
+        from datetime import datetime
+        current_month = datetime.now().strftime('%Y-%m')
+        
         response = supabase.table('customers').select('id, created_at, user_id', count='exact').execute()
         customers = response.data or []
         
-        current_month = datetime.now().strftime('%Y-%m')
         new_this_month = sum(1 for c in customers if c.get('created_at', '').startswith(current_month))
+        
+        # Calculate total revenue from all orders
+        orders_response = supabase.table('orders').select('total').execute()
+        total_revenue = sum(float(order.get('total', 0)) for order in (orders_response.data or []))
         
         return jsonify({
             "success": True,
             "data": {
-                "total": len(customers),
-                "active": len(customers),
+                "total": response.count or len(customers),
+                "active": len([c for c in customers if c.get('user_id')]),
                 "new_this_month": new_this_month,
-                "total_revenue": 0
+                "total_revenue": round(total_revenue, 2)
             }
         }), 200
     except Exception as e:
