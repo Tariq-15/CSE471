@@ -104,9 +104,13 @@ def admin_size_chart_add_row(template_id):
             return jsonify({"success": False, "error": f"Template with id {template_id} not found"}), 404
         
         # Get max sort_order for this template to append at the end
-        existing_rows = supabase.table('size_chart_rows').select('sort_order').eq('template_id', template_id).order('sort_order', desc=True).limit(1).execute()
-        max_sort_order = existing_rows.data[0]['sort_order'] if existing_rows.data else -1
-        sort_order = data.get('sort_order', max_sort_order + 1)
+        sort_order = data.get('sort_order')
+        if sort_order is None:
+            existing_rows = supabase.table('size_chart_rows').select('sort_order').eq('template_id', template_id).order('sort_order', desc=True).limit(1).execute()
+            max_sort_order = existing_rows.data[0]['sort_order'] if existing_rows.data and len(existing_rows.data) > 0 else -1
+            sort_order = max_sort_order + 1
+        else:
+            sort_order = int(sort_order)
         
         response = supabase.table('size_chart_rows').insert({
             'template_id': template_id,
