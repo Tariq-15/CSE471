@@ -32,9 +32,7 @@ export function ProductsManagement() {
     description: '',
     category: '',
     price: '',
-    size: '',
     color: '',
-    stock: '',
     tags: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -84,9 +82,7 @@ export function ProductsManagement() {
         description: newProduct.description,
         category: newProduct.category,
         price: parseFloat(newProduct.price),
-        size: newProduct.size ? newProduct.size.split(',').map(s => s.trim()) : [],
         color: newProduct.color ? newProduct.color.split(',').map(c => c.trim()) : [],
-        stock: parseInt(newProduct.stock) || 0,
         tags: newProduct.tags ? newProduct.tags.split(',').map(t => t.trim()) : []
       };
 
@@ -99,9 +95,7 @@ export function ProductsManagement() {
           description: '',
           category: '',
           price: '',
-          size: '',
           color: '',
-          stock: '',
           tags: ''
         });
         fetchProducts();
@@ -227,47 +221,24 @@ export function ProductsManagement() {
               <div className="border-t pt-4">
                 <h4 className="font-medium text-black mb-3">Product Details</h4>
                 <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <Label htmlFor="variation-size">Sizes (comma-separated)</Label>
-                      <Input 
-                        id="variation-size" 
-                        placeholder="S, M, L, XL"
-                        value={newProduct.size}
-                        onChange={(e) => setNewProduct({...newProduct, size: e.target.value})}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="variation-color">Colors (comma-separated)</Label>
-                      <Input 
-                        id="variation-color" 
-                        placeholder="Red, Blue, Black"
-                        value={newProduct.color}
-                        onChange={(e) => setNewProduct({...newProduct, color: e.target.value})}
-                      />
-                    </div>
+                  <div>
+                    <Label htmlFor="variation-color">Colors (comma-separated)</Label>
+                    <Input 
+                      id="variation-color" 
+                      placeholder="Red, Blue, Black"
+                      value={newProduct.color}
+                      onChange={(e) => setNewProduct({...newProduct, color: e.target.value})}
+                    />
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <Label htmlFor="variation-price">Price ($) *</Label>
-                      <Input 
-                        id="variation-price" 
-                        type="number" 
-                        placeholder="0.00"
-                        value={newProduct.price}
-                        onChange={(e) => setNewProduct({...newProduct, price: e.target.value})}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="variation-stock">Stock</Label>
-                      <Input 
-                        id="variation-stock" 
-                        type="number" 
-                        placeholder="0"
-                        value={newProduct.stock}
-                        onChange={(e) => setNewProduct({...newProduct, stock: e.target.value})}
-                      />
-                    </div>
+                  <div>
+                    <Label htmlFor="variation-price">Price ($) *</Label>
+                    <Input 
+                      id="variation-price" 
+                      type="number" 
+                      placeholder="0.00"
+                      value={newProduct.price}
+                      onChange={(e) => setNewProduct({...newProduct, price: e.target.value})}
+                    />
                   </div>
                 </div>
               </div>
