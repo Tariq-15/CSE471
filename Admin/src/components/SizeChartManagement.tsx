@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "./ui/dialog";
 import { Badge } from "./ui/badge";
 import { Plus, Edit, Trash2, Loader2, Grid3X3, Save, X, Ruler } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import {
   getSizeChartTemplates,
   getSizeChartTemplate,
