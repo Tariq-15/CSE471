@@ -8,9 +8,12 @@ import { OrdersManagement } from "./components/OrdersManagement";
 import { OrderDetail } from "./components/OrderDetail";
 import { CustomersManagement } from "./components/CustomersManagement";
 import { CustomerDetail } from "./components/CustomerDetail";
-import { SizeChartManagement } from "./components/SizeChartManagement";
+import { SuppliersManagement } from "./components/SuppliersManagement";
+import { SupplierDetail } from "./components/SupplierDetail";
 import { Analytics } from "./components/Analytics";
+import { StockManagement } from "./components/StockManagement";
 import { DiscountsManagement } from "./components/DiscountsManagement";
+import { NotificationsManagement } from "./components/NotificationsManagement";
 import { UserSettings } from "./components/UserSettings";
 
 export default function App() {
@@ -19,6 +22,17 @@ export default function App() {
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
+  const [selectedSupplierId, setSelectedSupplierId] = useState<number | null>(null);
+
+  // Error boundary for debugging
+  if (typeof window !== 'undefined') {
+    window.addEventListener('error', (event) => {
+      console.error('Global error:', event.error);
+    });
+    window.addEventListener('unhandledrejection', (event) => {
+      console.error('Unhandled promise rejection:', event.reason);
+    });
+  }
 
   const renderSection = () => {
     switch (activeSection) {
@@ -39,12 +53,19 @@ export default function App() {
           return <CustomerDetail customerId={selectedCustomerId} onBack={() => setSelectedCustomerId(null)} />;
         }
         return <CustomersManagement onViewCustomer={setSelectedCustomerId} />;
-      case "sizecharts":
-        return <SizeChartManagement />;
+      case "suppliers":
+        if (selectedSupplierId) {
+          return <SupplierDetail supplierId={selectedSupplierId} onBack={() => setSelectedSupplierId(null)} />;
+        }
+        return <SuppliersManagement onViewSupplier={setSelectedSupplierId} />;
       case "analytics":
         return <Analytics />;
+      case "stock":
+        return <StockManagement />;
       case "discounts":
         return <DiscountsManagement />;
+      case "notifications":
+        return <NotificationsManagement />;
       case "settings":
         return <UserSettings />;
       default:
