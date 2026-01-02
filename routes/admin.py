@@ -104,7 +104,7 @@ def admin_product_detail(product_id):
             if product_data.get('size_chart_template_id'):
                 try:
                     product_sizes_response = supabase.table('product_sizes')\
-                        .select('id, size_chart_row_id')\
+                        .select('id, size_row_id')\
                         .eq('product_id', product_id)\
                         .execute()
                     
@@ -112,7 +112,7 @@ def admin_product_detail(product_id):
                     if product_sizes_response.data:
                         for ps in product_sizes_response.data:
                             product_size_id = ps['id']
-                            row_id = ps['size_chart_row_id']
+                            row_id = ps['size_row_id']
                             
                             row_response = supabase.table('size_chart_rows')\
                                 .select('size_label')\
@@ -163,14 +163,16 @@ def admin_product_detail(product_id):
                         template_rows = supabase.table('size_chart_rows').select('id, size_label').eq('template_id', template_id).execute()
                         
                         if template_rows.data:
-                            existing_sizes = supabase.table('product_sizes').select('id, size_chart_row_id').eq('product_id', product_id).execute()
-                            existing_row_ids = {s['size_chart_row_id'] for s in (existing_sizes.data or [])}
+                            existing_sizes = supabase.table('product_sizes').select('id, size_row_id').eq('product_id', product_id).execute()
+                            existing_row_ids = {s['size_row_id'] for s in (existing_sizes.data or []) if s.get('size_row_id')}
                             
                             for row in template_rows.data:
                                 if row['id'] not in existing_row_ids:
                                     supabase.table('product_sizes').insert({
                                         'product_id': product_id,
-                                        'size_chart_row_id': row['id']
+                                        'size_row_id': row['id'],
+                                        'size_label': row.get('size_label', ''),
+                                        'is_active': True
                                     }).execute()
                     except Exception as e:
                         print(f"Warning: Could not auto-create product_sizes: {e}")
@@ -186,19 +188,42 @@ def admin_product_detail(product_id):
                         stock = stock_item.get('stock', 0)
                         
                         if row_id:
-                            product_size = supabase.table('product_sizes').select('id').eq('product_id', product_id).eq('size_chart_row_id', row_id).execute()
+                            # Find or create product_size record
+                            product_size = supabase.table('product_sizes').select('id').eq('product_id', product_id).eq('size_row_id', row_id).execute()
                             
-                            if product_size.data:
+                            product_size_id = None
+                            if product_size.data and len(product_size.data) > 0:
                                 product_size_id = product_size.data[0]['id']
+                            else:
+                                # Create product_size if it doesn't exist
+                                row_info = supabase.table('size_chart_rows').select('size_label').eq('id', row_id).execute()
+                                size_label = row_info.data[0]['size_label'] if row_info.data else ''
                                 
+                                new_size = supabase.table('product_sizes').insert({
+                                    'product_id': product_id,
+                                    'size_row_id': row_id,
+                                    'size_label': size_label,
+                                    'is_active': True
+                                }).execute()
+                                
+                                if new_size.data:
+                                    product_size_id = new_size.data[0]['id']
+                            
+                            if product_size_id:
                                 existing_stock = supabase.table('product_size_stock').select('id').eq('product_size_id', product_size_id).execute()
                                 
-                                if existing_stock.data:
-                                    supabase.table('product_size_stock').update({'stock_quantity': stock}).eq('product_size_id', product_size_id).execute()
+                                if existing_stock.data and len(existing_stock.data) > 0:
+                                    # Update existing stock
+                                    supabase.table('product_size_stock').update({
+                                        'stock_quantity': stock,
+                                        'reserved_quantity': 0  # Ensure reserved_quantity is set
+                                    }).eq('product_size_id', product_size_id).execute()
                                 else:
+                                    # Insert new stock record
                                     supabase.table('product_size_stock').insert({
                                         'product_size_id': product_size_id,
-                                        'stock_quantity': stock
+                                        'stock_quantity': stock,
+                                        'reserved_quantity': 0  # Required field
                                     }).execute()
                 except Exception as e:
                     print(f"Warning: Could not update size stock: {e}")

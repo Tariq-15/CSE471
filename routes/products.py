@@ -206,7 +206,7 @@ def get_product(product_id):
             if product_data.get('size_chart_template_id'):
                 try:
                     product_sizes_response = supabase.table('product_sizes')\
-                        .select('id, size_chart_row_id')\
+                        .select('id, size_row_id')\
                         .eq('product_id', product_id)\
                         .execute()
                     
@@ -214,7 +214,7 @@ def get_product(product_id):
                     if product_sizes_response.data:
                         for ps in product_sizes_response.data:
                             product_size_id = ps['id']
-                            row_id = ps['size_chart_row_id']
+                            row_id = ps['size_row_id']
                             
                             row_response = supabase.table('size_chart_rows')\
                                 .select('size_label')\
@@ -317,7 +317,7 @@ def get_product_size_chart(product_id):
         size_stocks = {}
         if row_ids:
             product_sizes = supabase.table('product_sizes')\
-                .select('size_chart_row_id, size_chart_rows(size_label), product_size_stock(stock_quantity)')\
+                .select('size_row_id, size_chart_rows(size_label), product_size_stock(stock_quantity)')\
                 .eq('product_id', product_id)\
                 .execute()
             

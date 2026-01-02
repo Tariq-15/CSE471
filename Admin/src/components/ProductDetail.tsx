@@ -208,7 +208,8 @@ export function ProductDetail() {
       const response = await updateProduct(String(product.id), updateData);
       
       if (response.success) {
-        setProduct(prev => prev ? { ...prev, ...updateData } : null);
+        // Refresh product data to get updated size stocks from database
+        await fetchProduct();
         setIsEditing(false);
       } else {
         alert(response.error || 'Failed to update product');
