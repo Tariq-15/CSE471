@@ -17,6 +17,7 @@ import { DiscountsManagement } from "./components/DiscountsManagement";
 import { NotificationsManagement } from "./components/NotificationsManagement";
 import { UserSettings } from "./components/UserSettings";
 import { SizeChartManagement } from "./components/SizeChartManagement";
+import { CategoryManagement } from "./components/CategoryManagement";
 
 export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -34,6 +35,7 @@ export default function App() {
     if (path.startsWith('/stock')) return 'stock';
     if (path.startsWith('/discounts')) return 'discounts';
     if (path.startsWith('/sizecharts')) return 'sizecharts';
+    if (path.startsWith('/categories')) return 'categories';
     if (path.startsWith('/notifications')) return 'notifications';
     if (path.startsWith('/settings')) return 'settings';
     return 'dashboard';
@@ -67,6 +69,7 @@ export default function App() {
             <Route path="/stock" element={<StockManagement />} />
             <Route path="/discounts" element={<DiscountsManagement />} />
             <Route path="/sizecharts" element={<SizeChartManagement />} />
+            <Route path="/categories" element={<CategoryManagement />} />
             <Route path="/notifications" element={<NotificationsManagement />} />
             <Route path="/settings" element={<UserSettings />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />

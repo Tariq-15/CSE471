@@ -8,7 +8,8 @@ import {
   Ruler, 
   Percent, 
   Settings,
-  Home
+  Home,
+  Folder
 } from "lucide-react";
 import { cn } from "./ui/utils";
 
@@ -22,6 +23,7 @@ const navigationItems = [
   { id: 'products', label: 'Products', icon: Package, path: '/products' },
   { id: 'orders', label: 'Orders', icon: ShoppingCart, path: '/orders' },
   { id: 'customers', label: 'Customers', icon: Users, path: '/customers' },
+  { id: 'categories', label: 'Categories', icon: Folder, path: '/categories' },
   { id: 'sizecharts', label: 'Size Charts', icon: Ruler, path: '/sizecharts' },
   { id: 'analytics', label: 'Analytics', icon: TrendingUp, path: '/analytics' },
   { id: 'discounts', label: 'Discounts', icon: Percent, path: '/discounts' },

@@ -434,6 +434,131 @@ def admin_customers_stats():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+# Admin Categories Routes
+@bp.route('/categories', methods=['GET', 'POST'])
+def admin_categories():
+    """Get all categories or create a new category"""
+    try:
+        if request.method == 'GET':
+            response = supabase.table('categories').select('*', count='exact').order('name').execute()
+            
+            categories = []
+            for cat in (response.data or []):
+                # Get product count for each category
+                products_response = supabase.table('products')\
+                    .select('id', count='exact')\
+                    .eq('category', cat['name'])\
+                    .execute()
+                
+                cat['products_count'] = products_response.count or 0
+                categories.append(cat)
+            
+            return jsonify({
+                "success": True,
+                "data": categories
+            }), 200
+        
+        elif request.method == 'POST':
+            data = request.json
+            if not data or not data.get('name'):
+                return jsonify({"success": False, "error": "Category name is required"}), 400
+            
+            # Check if category already exists
+            existing = supabase.table('categories').select('id').eq('name', data['name']).execute()
+            if existing.data:
+                return jsonify({"success": False, "error": f"Category '{data['name']}' already exists"}), 400
+            
+            category_data = {
+                'name': data['name'],
+                'description': data.get('description', '')
+            }
+            
+            response = supabase.table('categories').insert(category_data).execute()
+            
+            if response.data:
+                return jsonify({
+                    "success": True,
+                    "data": response.data[0],
+                    "message": "Category created successfully"
+                }), 201
+            else:
+                return jsonify({"success": False, "error": "Failed to create category"}), 500
+                
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Error in admin_categories: {error_trace}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.route('/categories/<int:category_id>', methods=['GET', 'PUT', 'DELETE'])
+def admin_category_detail(category_id):
+    """Get, update or delete a category"""
+    try:
+        if request.method == 'GET':
+            response = supabase.table('categories').select('*').eq('id', category_id).execute()
+            if not response.data:
+                return jsonify({"success": False, "message": "Category not found"}), 404
+            
+            category = response.data[0]
+            # Get product count
+            products_response = supabase.table('products')\
+                .select('id', count='exact')\
+                .eq('category', category['name'])\
+                .execute()
+            
+            category['products_count'] = products_response.count or 0
+            
+            return jsonify({"success": True, "data": category}), 200
+        
+        elif request.method == 'PUT':
+            data = request.json
+            if not data or not data.get('name'):
+                return jsonify({"success": False, "error": "Category name is required"}), 400
+            
+            # Check if another category with the same name exists
+            existing = supabase.table('categories').select('id').eq('name', data['name']).neq('id', category_id).execute()
+            if existing.data:
+                return jsonify({"success": False, "error": f"Category '{data['name']}' already exists"}), 400
+            
+            update_data = {
+                'name': data['name'],
+                'description': data.get('description', '')
+            }
+            
+            response = supabase.table('categories').update(update_data).eq('id', category_id).execute()
+            
+            if response.data:
+                return jsonify({"success": True, "data": response.data[0]}), 200
+            else:
+                return jsonify({"success": False, "error": "Failed to update category"}), 500
+        
+        elif request.method == 'DELETE':
+            # Check if category is used by any products
+            category_response = supabase.table('categories').select('name').eq('id', category_id).execute()
+            if category_response.data:
+                category_name = category_response.data[0]['name']
+                products_response = supabase.table('products')\
+                    .select('id', count='exact')\
+                    .eq('category', category_name)\
+                    .execute()
+                
+                if products_response.count and products_response.count > 0:
+                    return jsonify({
+                        "success": False,
+                        "error": f"Cannot delete category. It is used by {products_response.count} product(s)"
+                    }), 400
+            
+            supabase.table('categories').delete().eq('id', category_id).execute()
+            return jsonify({"success": True, "message": "Category deleted"}), 200
+            
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Error in admin_category_detail: {error_trace}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 # Admin Dashboard Routes
 @bp.route('/dashboard/stats', methods=['GET'])
 def admin_dashboard_stats():
