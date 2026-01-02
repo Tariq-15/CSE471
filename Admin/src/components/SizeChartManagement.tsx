@@ -150,9 +150,13 @@ export function SizeChartManagement() {
         if (refreshed.success && refreshed.data) {
           setSelectedTemplate(refreshed.data);
         }
+      } else {
+        alert(`Failed to add row: ${response.error || 'Unknown error'}`);
+        console.error('Add row error:', response);
       }
     } catch (err) {
-      alert('Failed to add row');
+      console.error('Add row exception:', err);
+      alert(`Failed to add row: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setIsSubmitting(false);
     }
