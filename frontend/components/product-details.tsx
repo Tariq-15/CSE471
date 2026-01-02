@@ -22,7 +22,6 @@ interface SizeStock {
 export function ProductDetails({ productId }: ProductDetailsProps) {
   const [product, setProduct] = useState<Product | null>(null)
   const [loading, setLoading] = useState(true)
-  const [selectedColor, setSelectedColor] = useState<string>("")
   const [selectedSize, setSelectedSize] = useState<string>("")
   const [quantity, setQuantity] = useState(1)
   const [addingToCart, setAddingToCart] = useState(false)
@@ -39,11 +38,6 @@ export function ProductDetails({ productId }: ProductDetailsProps) {
         if (response.success && response.data) {
           const productData = response.data
           setProduct(productData)
-          
-          // Set default color
-          if (productData.color && productData.color.length > 0) {
-            setSelectedColor(productData.color[0])
-          }
           
           // Use size_stocks from API if available
           if (productData.size_stocks && productData.size_stocks.length > 0) {
@@ -121,7 +115,6 @@ export function ProductDetails({ productId }: ProductDetailsProps) {
         session_id: sessionId,
         product_id: product.id,
         size: hasSizeChart ? selectedSize : undefined, // Only include size if product has size chart
-        color: selectedColor,
         quantity: quantity,
         price: product.price
       })
@@ -173,7 +166,6 @@ export function ProductDetails({ productId }: ProductDetailsProps) {
     ? product.image_urls 
     : [product.image_url || "/placeholder.svg"]
 
-  const colors = product.color || []
   // Only show sizes if product has a size chart template
   // Use sizes from size_stocks if available, otherwise fallback to product.size
   const hasSizeChart = product.size_chart_template_id != null && product.size_chart_template_id !== undefined
@@ -184,26 +176,6 @@ export function ProductDetails({ productId }: ProductDetailsProps) {
   const discountPercent = product.original_price && product.original_price > product.price
     ? Math.round((1 - product.price / product.original_price) * 100)
     : 0
-
-  const colorMap: Record<string, string> = {
-    'Black': 'bg-black',
-    'White': 'bg-white border border-gray-300',
-    'Gray': 'bg-gray-400',
-    'Grey': 'bg-gray-400',
-    'Navy': 'bg-blue-900',
-    'Blue': 'bg-blue-500',
-    'Light Blue': 'bg-blue-300',
-    'Red': 'bg-red-500',
-    'Green': 'bg-green-500',
-    'Yellow': 'bg-yellow-400',
-    'Pink': 'bg-pink-400',
-    'Brown': 'bg-amber-700',
-    'Cream': 'bg-amber-100',
-    'Burgundy': 'bg-red-900',
-    'Olive': 'bg-olive-500',
-    'Khaki': 'bg-yellow-700',
-    'Beige': 'bg-amber-200',
-  }
 
   const selectedStock = getSelectedSizeStock()
 
@@ -281,25 +253,6 @@ export function ProductDetails({ productId }: ProductDetailsProps) {
           <Heart className="w-4 h-4" />
           Add to Wish List
         </Button>
-
-        {/* Color Selection */}
-        {colors.length > 0 && (
-          <div className="mb-6">
-            <label className="text-sm font-semibold mb-3 block">Color: {selectedColor}</label>
-            <div className="flex items-center gap-3">
-              {colors.map((color) => (
-                <button
-                  key={color}
-                  onClick={() => setSelectedColor(color)}
-                  className={`w-10 h-10 rounded-full ${colorMap[color] || 'bg-gray-400'} ${
-                    selectedColor === color ? "ring-2 ring-black ring-offset-2" : ""
-                  } hover:scale-110 transition-transform`}
-                  title={color}
-                />
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Size Chart Link - Only show if product has size chart */}
         {hasSizeChart && sizeChartData && (

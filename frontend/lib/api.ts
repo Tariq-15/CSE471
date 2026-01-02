@@ -23,7 +23,6 @@ export interface Product {
   brand?: string
   stock?: number
   status?: string
-  color?: any
   size?: any
   tags?: string[]
   created_at?: string

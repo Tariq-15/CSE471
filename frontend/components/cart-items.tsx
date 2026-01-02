@@ -146,11 +146,6 @@ export function CartItems({ sessionId, onCartUpdate, onCartDataChange }: CartIte
                         <span className="font-medium">Size:</span> {item.size}
                       </p>
                     )}
-                    {item.color && (
-                      <p className="text-sm text-muted-foreground">
-                        <span className="font-medium">Color:</span> {item.color}
-                      </p>
-                    )}
                   </div>
 
                   {/* Delete Button */}

@@ -187,12 +187,11 @@ def create_order():
                 'product_name': product_name,
                 'product_image': product_image,
                 'size': item.get('size') if item.get('size') else None,
-                'color': item.get('color') if item.get('color') else None,
                 'quantity': int(item['quantity']),
                 'price': round(float(item['price']), 2)
             })
         
-        # Insert order items with error handling
+        # Insert order items with error handling and update stock
         if order_items:
             try:
                 items_response = supabase.table('order_items').insert(order_items).execute()
@@ -200,6 +199,76 @@ def create_order():
                     # Order created but items failed - this is a problem
                     # We should probably delete the order or handle this better
                     pass
+                else:
+                    # Decrease stock for each product
+                    for item in cart_response.data:
+                        product_id = item.get('product_id')
+                        quantity = int(item.get('quantity', 0))
+                        size = item.get('size')
+                        
+                        if product_id and quantity > 0:
+                            try:
+                                # Check if product has size chart (uses product_size_stock)
+                                product = supabase.table('products').select('size_chart_template_id').eq('id', product_id).execute()
+                                
+                                if product.data and product.data[0].get('size_chart_template_id'):
+                                    # Product uses size-based stock
+                                    if size:
+                                        # Find product_size by size_row_id (matching size_label)
+                                        size_row = supabase.table('size_chart_rows')\
+                                            .select('id')\
+                                            .eq('size_label', size)\
+                                            .eq('template_id', product.data[0]['size_chart_template_id'])\
+                                            .execute()
+                                        
+                                        if size_row.data:
+                                            row_id = size_row.data[0]['id']
+                                            product_size = supabase.table('product_sizes')\
+                                                .select('id')\
+                                                .eq('product_id', product_id)\
+                                                .eq('size_row_id', row_id)\
+                                                .execute()
+                                            
+                                            if product_size.data:
+                                                product_size_id = product_size.data[0]['id']
+                                                # Get current stock
+                                                stock_record = supabase.table('product_size_stock')\
+                                                    .select('stock_quantity')\
+                                                    .eq('product_size_id', product_size_id)\
+                                                    .execute()
+                                                
+                                                if stock_record.data:
+                                                    current_stock = stock_record.data[0].get('stock_quantity', 0)
+                                                    new_stock = max(0, current_stock - quantity)
+                                                    
+                                                    # Update stock
+                                                    supabase.table('product_size_stock')\
+                                                        .update({'stock_quantity': new_stock})\
+                                                        .eq('product_size_id', product_size_id)\
+                                                        .execute()
+                                    
+                                    # Also update total product stock
+                                    product_stock = supabase.table('products').select('stock').eq('id', product_id).execute()
+                                    if product_stock.data:
+                                        current_total_stock = product_stock.data[0].get('stock', 0)
+                                        new_total_stock = max(0, current_total_stock - quantity)
+                                        supabase.table('products')\
+                                            .update({'stock': new_total_stock})\
+                                            .eq('id', product_id)\
+                                            .execute()
+                                else:
+                                    # Product uses simple stock (no size chart)
+                                    product_stock = supabase.table('products').select('stock').eq('id', product_id).execute()
+                                    if product_stock.data:
+                                        current_stock = product_stock.data[0].get('stock', 0)
+                                        new_stock = max(0, current_stock - quantity)
+                                        supabase.table('products')\
+                                            .update({'stock': new_stock})\
+                                            .eq('id', product_id)\
+                                            .execute()
+                            except Exception as stock_error:
+                                # Log stock update error but don't fail the order
+                                print(f"Warning: Failed to update stock for product {product_id}: {str(stock_error)}")
             except Exception as e:
                 return jsonify({
                     "success": False,

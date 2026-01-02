@@ -95,7 +95,6 @@ export function ProductsGrid() {
         const tag = searchParams.get('tag')
         const minPrice = searchParams.get('min_price')
         const maxPrice = searchParams.get('max_price')
-        const color = searchParams.get('color')
         const category = searchParams.get('category')
         
         const response = await getProducts({
@@ -105,7 +104,6 @@ export function ProductsGrid() {
           tag: tag || undefined,
           min_price: minPrice ? Number(minPrice) : undefined,
           max_price: maxPrice ? Number(maxPrice) : undefined,
-          color: color || undefined,
           category: category || undefined
         })
         

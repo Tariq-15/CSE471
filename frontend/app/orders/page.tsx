@@ -213,7 +213,6 @@ export default function OrdersPage() {
                           <h4 className="font-semibold mb-1">{item.product_name}</h4>
                           <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
                             {item.size && <span>Size: {item.size}</span>}
-                            {item.color && <span>Color: {item.color}</span>}
                             <span>Qty: {item.quantity}</span>
                           </div>
                         </div>

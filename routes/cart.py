@@ -41,7 +41,6 @@ def get_cart():
                 'quantity': item['quantity'],
                 'price': float(item['price']),
                 'size': item.get('size'),
-                'color': item.get('color'),
                 'products': {
                     'name': product_info.get('name') if product_info else None,
                     'image_url': image_url,
@@ -76,7 +75,6 @@ def add_to_cart():
         session_id = data.get('session_id')
         product_id = data.get('product_id')
         size = data.get('size')
-        color = data.get('color')
         quantity = data.get('quantity', 1)
         
         if not session_id or not product_id:
@@ -99,8 +97,7 @@ def add_to_cart():
             .select('id, quantity')\
             .eq('session_id', session_id)\
             .eq('product_id', product_id)\
-            .eq('size', size)\
-            .eq('color', color)\
+            .eq('size', size if size else None)\
             .execute()
         
         if existing_response.data:
@@ -116,7 +113,6 @@ def add_to_cart():
                 'session_id': session_id,
                 'product_id': product_id,
                 'size': size,
-                'color': color,
                 'quantity': quantity,
                 'price': price
             }
