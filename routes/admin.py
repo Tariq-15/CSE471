@@ -196,17 +196,53 @@ def admin_orders():
         page = request.args.get('page', 1, type=int)
         limit = request.args.get('limit', 20, type=int)
         status = request.args.get('status', '')
+        search = request.args.get('search', '')
         offset = (page - 1) * limit
         
-        query = supabase.table('orders').select('*, customers(*)', count='exact')
-        if status:
+        query = supabase.table('orders').select('*, customers(full_name, email, phone_number, district, thana, full_address)', count='exact')
+        if status and status != 'all':
             query = query.eq('status', status)
         
         response = query.order('created_at', desc=True).range(offset, offset + limit - 1).execute()
         
+        # Format orders for admin panel
+        orders_list = []
+        for order in (response.data or []):
+            customer = order.get('customers', {})
+            if isinstance(customer, list) and len(customer) > 0:
+                customer = customer[0]
+            elif not customer:
+                customer = {}
+            
+            # Get order items count
+            items_response = supabase.table('order_items')\
+                .select('id', count='exact')\
+                .eq('order_id', order['id'])\
+                .execute()
+            items_count = items_response.count if hasattr(items_response, 'count') else len(items_response.data or [])
+            
+            order_data = {
+                'id': order.get('id'),
+                'order_number': f"ORD-{order.get('id', '')[:8].upper()}" if order.get('id') else 'N/A',
+                'customer': customer.get('full_name', 'Unknown Customer'),
+                'email': customer.get('email', ''),
+                'date': order.get('created_at', ''),
+                'created_at': order.get('created_at', ''),
+                'status': order.get('status', 'pending'),
+                'total': float(order.get('total', 0)),
+                'subtotal': float(order.get('subtotal', 0)),
+                'discount': float(order.get('discount', 0)),
+                'delivery_fee': float(order.get('delivery_fee', 0)),
+                'items_count': items_count,
+                'customer_id': order.get('customer_id'),
+                'user_id': order.get('user_id'),
+                'session_id': order.get('session_id')
+            }
+            orders_list.append(order_data)
+        
         return jsonify({
             "success": True,
-            "data": response.data or [],
+            "data": orders_list,
             "pagination": {
                 "page": page,
                 "limit": limit,
@@ -215,6 +251,8 @@ def admin_orders():
             }
         }), 200
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
 
 
@@ -433,6 +471,89 @@ def admin_dashboard_low_stock():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@bp.route('/stock/overview', methods=['GET'])
+def admin_stock_overview():
+    """Get stock overview by category"""
+    try:
+        products_response = supabase.table('products').select('id, name, stock, category, price').execute()
+        products = products_response.data or []
+        
+        # Group by category
+        category_data = defaultdict(lambda: {
+            'total_items': 0,
+            'low_stock': 0,
+            'out_of_stock': 0,
+            'value': 0.0
+        })
+        
+        for product in products:
+            category = product.get('category', 'Uncategorized')
+            stock = product.get('stock', 0)
+            price = float(product.get('price', 0))
+            
+            category_data[category]['total_items'] += 1
+            category_data[category]['value'] += stock * price
+            
+            if stock == 0:
+                category_data[category]['out_of_stock'] += 1
+            elif stock <= 10:
+                category_data[category]['low_stock'] += 1
+        
+        overview = [
+            {
+                'category': cat,
+                'total_items': data['total_items'],
+                'low_stock': data['low_stock'],
+                'out_of_stock': data['out_of_stock'],
+                'value': round(data['value'], 2)
+            }
+            for cat, data in category_data.items()
+        ]
+        
+        return jsonify({"success": True, "data": overview}), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.route('/stock/out-of-stock', methods=['GET'])
+def admin_out_of_stock():
+    """Get out of stock products"""
+    try:
+        response = supabase.table('products')\
+            .select('id, name, category')\
+            .eq('stock', 0)\
+            .order('name')\
+            .execute()
+        
+        # Get last order date for each product
+        products = []
+        for product in (response.data or []):
+            product_id = product.get('id')
+            
+            # Get last order date for this product
+            order_items_response = supabase.table('order_items')\
+                .select('order_id, created_at')\
+                .eq('product_id', product_id)\
+                .order('created_at', desc=True)\
+                .limit(1)\
+                .execute()
+            
+            last_order_date = None
+            if order_items_response.data and len(order_items_response.data) > 0:
+                last_order_date = order_items_response.data[0].get('created_at')
+            
+            products.append({
+                'id': product_id,
+                'name': product.get('name', ''),
+                'category': product.get('category', ''),
+                'last_order_date': last_order_date
+            })
+        
+        return jsonify({"success": True, "data": products}), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 # Admin Discounts Routes
 @bp.route('/discounts', methods=['GET', 'POST'])
 def admin_discounts():
@@ -529,4 +650,90 @@ def admin_discount_detail(discount_id):
             return jsonify({"success": True, "message": "Discount deleted"}), 200
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.route('/discounts/validate', methods=['POST'])
+def validate_discount_code():
+    """Validate a discount/promo code"""
+    try:
+        data = request.json
+        code = data.get('code')
+        
+        if not code:
+            return jsonify({
+                "success": False,
+                "message": "Promo code is required"
+            }), 400
+        
+        # Find the discount code (case-insensitive)
+        code_upper = code.upper().strip()
+        # Get all discounts and find matching one (case-insensitive)
+        all_discounts = supabase.table('discounts').select('*').execute()
+        matching_discount = None
+        for discount in (all_discounts.data or []):
+            discount_code = discount.get('code', '').upper().strip()
+            if discount_code == code_upper:
+                matching_discount = discount
+                break
+        
+        if not matching_discount:
+            return jsonify({
+                "success": False,
+                "message": "Invalid promo code"
+            }), 400
+        
+        discount = matching_discount
+        
+        # Check if code is active
+        if discount.get('status') != 'active':
+            return jsonify({
+                "success": False,
+                "message": "This promo code is not active"
+            }), 400
+        
+        # Check expiration date
+        expiration_date = discount.get('expiration_date')
+        if expiration_date:
+            from datetime import datetime
+            try:
+                exp_date = datetime.strptime(expiration_date, '%Y-%m-%d').date()
+                if datetime.now().date() > exp_date:
+                    return jsonify({
+                        "success": False,
+                        "message": "This promo code has expired"
+                    }), 400
+            except:
+                pass  # If date parsing fails, skip expiration check
+        
+        # Check usage limit
+        usage_count = discount.get('usage_count', 0)
+        usage_limit = discount.get('usage_limit', 100)
+        if usage_count >= usage_limit:
+            return jsonify({
+                "success": False,
+                "message": "This promo code has reached its usage limit"
+            }), 400
+        
+        # Return discount details
+        return jsonify({
+            "success": True,
+            "data": {
+                "id": discount.get('id'),
+                "code": discount.get('code'),
+                "discount": float(discount.get('discount', 0)),
+                "type": discount.get('type', 'percentage'),
+                "expiration_date": discount.get('expiration_date'),
+                "status": discount.get('status'),
+                "usage_count": discount.get('usage_count', 0),
+                "usage_limit": discount.get('usage_limit', 100),
+                "min_order_value": float(discount.get('min_order_value', 0))
+            }
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "message": f"An error occurred while validating the promo code: {str(e)}"
+        }), 500
 

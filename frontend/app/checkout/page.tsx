@@ -1,3 +1,6 @@
+"use client"
+
+import { useState, useEffect } from "react"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { CartItems } from "@/components/cart-items"
@@ -6,6 +9,32 @@ import { DeliveryForm } from "@/components/delivery-form"
 import Link from "next/link"
 
 export default function CheckoutPage() {
+  const [sessionId, setSessionId] = useState<string | null>(null)
+  const [cartData, setCartData] = useState<any>(null)
+  const [deliveryData, setDeliveryData] = useState<any>(null)
+
+  useEffect(() => {
+    // Get or create session_id from localStorage
+    let session_id = localStorage.getItem('session_id')
+    if (!session_id) {
+      // Generate a new session ID
+      session_id = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      localStorage.setItem('session_id', session_id)
+    }
+    setSessionId(session_id)
+  }, [])
+
+  const handleCartUpdate = () => {
+    // Trigger cart refresh if needed
+    if (sessionId) {
+      // CartItems component will handle fetching
+    }
+  }
+
+  const handleDeliveryDataChange = (data: any) => {
+    setDeliveryData(data)
+  }
+
   return (
     <div className="min-h-screen">
       <Header />
@@ -25,13 +54,25 @@ export default function CheckoutPage() {
         <div className="grid lg:grid-cols-[1fr_400px] gap-8">
           {/* Left Column - Cart Items and Delivery Form */}
           <div className="space-y-8">
-            <CartItems />
-            <DeliveryForm />
+            {sessionId && (
+              <CartItems 
+                sessionId={sessionId} 
+                onCartUpdate={handleCartUpdate}
+                onCartDataChange={setCartData}
+              />
+            )}
+            <DeliveryForm onDataChange={handleDeliveryDataChange} />
           </div>
 
           {/* Right Column - Order Summary */}
           <div className="lg:sticky lg:top-8 h-fit">
-            <OrderSummary />
+            {sessionId && (
+              <OrderSummary 
+                sessionId={sessionId}
+                cartData={cartData}
+                deliveryData={deliveryData}
+              />
+            )}
           </div>
         </div>
       </main>

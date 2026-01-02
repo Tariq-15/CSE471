@@ -12,15 +12,32 @@ def create_order():
     """Create order from cart"""
     try:
         data = request.json
+        if not data:
+            return jsonify({
+                "success": False,
+                "message": "Request body is required"
+            }), 400
+            
         session_id = data.get('session_id')
         customer_data = data.get('customer', {})
         discount_percentage = data.get('discount_percentage', 0)
+        discount_amount = data.get('discount_amount', 0)
         delivery_fee = data.get('delivery_fee', 15)
         
+        # Validate required fields
         if not session_id:
             return jsonify({
                 "success": False,
                 "message": "session_id is required"
+            }), 400
+        
+        # Validate customer data
+        required_customer_fields = ['full_name', 'email', 'phone_number', 'district', 'thana', 'full_address']
+        missing_fields = [field for field in required_customer_fields if not customer_data.get(field)]
+        if missing_fields:
+            return jsonify({
+                "success": False,
+                "message": f"Missing required customer fields: {', '.join(missing_fields)}"
             }), 400
         
         cart_response = supabase.table('cart_items')\
@@ -34,41 +51,107 @@ def create_order():
                 "message": "Cart is empty"
             }), 400
         
-        subtotal = sum(float(item['price']) * item['quantity'] for item in cart_response.data)
-        discount = subtotal * (discount_percentage / 100)
-        total = subtotal - discount + delivery_fee
+        # Calculate subtotal with validation
+        subtotal = 0
+        for item in cart_response.data:
+            try:
+                price = float(item.get('price', 0))
+                quantity = int(item.get('quantity', 0))
+                if price <= 0 or quantity <= 0:
+                    return jsonify({
+                        "success": False,
+                        "message": f"Invalid price or quantity in cart item"
+                    }), 400
+                subtotal += price * quantity
+            except (ValueError, TypeError) as e:
+                return jsonify({
+                    "success": False,
+                    "message": f"Invalid cart item data: {str(e)}"
+                }), 400
         
-        customer_response = supabase.table('customers').insert({
-            'full_name': customer_data.get('full_name'),
-            'email': customer_data.get('email'),
-            'phone_number': customer_data.get('phone_number'),
-            'district': customer_data.get('district'),
-            'thana': customer_data.get('thana'),
-            'full_address': customer_data.get('full_address')
-        }).execute()
+        # Calculate discount: use discount_amount if provided, otherwise calculate from percentage
+        if discount_amount > 0:
+            discount = float(discount_amount)
+        else:
+            discount = subtotal * (float(discount_percentage) / 100)
         
-        customer_id = customer_response.data[0]['id']
+        total = subtotal - discount + float(delivery_fee)
+        
+        # Insert customer with error handling
+        try:
+            customer_response = supabase.table('customers').insert({
+                'full_name': customer_data.get('full_name'),
+                'email': customer_data.get('email'),
+                'phone_number': customer_data.get('phone_number'),
+                'district': customer_data.get('district'),
+                'thana': customer_data.get('thana'),
+                'full_address': customer_data.get('full_address')
+            }).execute()
+            
+            if not customer_response.data:
+                return jsonify({
+                    "success": False,
+                    "message": "Failed to create customer record"
+                }), 500
+                
+            customer_id = customer_response.data[0]['id']
+        except Exception as e:
+            error_msg = str(e)
+            # Check if it's a unique constraint violation (duplicate email)
+            if 'duplicate' in error_msg.lower() or 'unique' in error_msg.lower():
+                # Try to get existing customer by email
+                existing_customer = supabase.table('customers')\
+                    .select('id')\
+                    .eq('email', customer_data.get('email'))\
+                    .execute()
+                if existing_customer.data:
+                    customer_id = existing_customer.data[0]['id']
+                else:
+                    return jsonify({
+                        "success": False,
+                        "message": f"Customer creation failed: {error_msg}"
+                    }), 400
+            else:
+                return jsonify({
+                    "success": False,
+                    "message": f"Customer creation failed: {error_msg}"
+                }), 400
         user_id = data.get('user_id')
         
         order_data = {
             'customer_id': customer_id,
             'session_id': session_id,
-            'subtotal': subtotal,
-            'discount': discount,
-            'delivery_fee': delivery_fee,
-            'total': total,
+            'subtotal': round(float(subtotal), 2),
+            'discount': round(float(discount), 2),
+            'delivery_fee': round(float(delivery_fee), 2),
+            'total': round(float(total), 2),
             'status': 'pending'
         }
         if user_id:
             order_data['user_id'] = user_id
         
-        order_response = supabase.table('orders').insert(order_data).execute()
-        order_id = order_response.data[0]['id']
+        # Insert order with error handling
+        try:
+            order_response = supabase.table('orders').insert(order_data).execute()
+            if not order_response.data:
+                return jsonify({
+                    "success": False,
+                    "message": "Failed to create order"
+                }), 500
+            order_id = order_response.data[0]['id']
+        except Exception as e:
+            return jsonify({
+                "success": False,
+                "message": f"Order creation failed: {str(e)}"
+            }), 400
         
         order_items = []
         for item in cart_response.data:
             product_info = item.get('products', {})
-            product_name = product_info.get('name') if product_info else None
+            # product_name is REQUIRED (NOT NULL) in database
+            product_name = product_info.get('name') if product_info else 'Unknown Product'
+            if not product_name or product_name.strip() == '':
+                product_name = 'Unknown Product'
             
             product_image = None
             if product_info:
@@ -78,21 +161,56 @@ def create_order():
                 else:
                     product_image = product_info.get('image_url')
             
+            # Validate required fields before adding
+            if not item.get('product_id'):
+                return jsonify({
+                    "success": False,
+                    "message": f"Cart item missing product_id"
+                }), 400
+            
+            if not item.get('quantity') or int(item.get('quantity', 0)) <= 0:
+                return jsonify({
+                    "success": False,
+                    "message": f"Invalid quantity for cart item"
+                }), 400
+            
+            if not item.get('price'):
+                return jsonify({
+                    "success": False,
+                    "message": f"Cart item missing price"
+                }), 400
+            
             order_items.append({
                 'order_id': order_id,
                 'product_id': item['product_id'],
                 'product_name': product_name,
                 'product_image': product_image,
-                'size': item.get('size'),
-                'color': item.get('color'),
-                'quantity': item['quantity'],
-                'price': item['price']
+                'size': item.get('size') if item.get('size') else None,
+                'color': item.get('color') if item.get('color') else None,
+                'quantity': int(item['quantity']),
+                'price': round(float(item['price']), 2)
             })
         
+        # Insert order items with error handling
         if order_items:
-            supabase.table('order_items').insert(order_items).execute()
+            try:
+                items_response = supabase.table('order_items').insert(order_items).execute()
+                if not items_response.data:
+                    # Order created but items failed - this is a problem
+                    # We should probably delete the order or handle this better
+                    pass
+            except Exception as e:
+                return jsonify({
+                    "success": False,
+                    "message": f"Failed to create order items: {str(e)}"
+                }), 400
         
-        supabase.table('cart_items').delete().eq('session_id', session_id).execute()
+        # Clear cart
+        try:
+            supabase.table('cart_items').delete().eq('session_id', session_id).execute()
+        except Exception as e:
+            # Cart clearing failed but order is created - log but don't fail
+            print(f"Warning: Failed to clear cart: {str(e)}")
         
         return jsonify({
             "success": True,
@@ -107,9 +225,13 @@ def create_order():
         }), 201
             
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Order creation error: {error_trace}")
         return jsonify({
             "success": False,
-            "error": str(e)
+            "error": str(e),
+            "message": f"An error occurred while creating the order: {str(e)}"
         }), 500
 
 

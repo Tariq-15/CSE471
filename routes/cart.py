@@ -18,7 +18,7 @@ def get_cart():
             }), 400
         
         cart_response = supabase.table('cart_items')\
-            .select('*, products(name, image_url, description)')\
+            .select('*, products(name, image_url, image_urls, description)')\
             .eq('session_id', session_id)\
             .order('created_at', desc=True)\
             .execute()
@@ -26,16 +26,28 @@ def get_cart():
         items = []
         for item in cart_response.data:
             product_info = item.get('products', {})
+            # Get image from image_urls array or image_url
+            image_urls = product_info.get('image_urls', [])
+            image_url = None
+            if image_urls and isinstance(image_urls, list) and len(image_urls) > 0:
+                image_url = image_urls[0]
+            else:
+                image_url = product_info.get('image_url')
+            
             items.append({
                 'id': item['id'],
                 'product_id': item['product_id'],
-                'product_name': product_info.get('name') if product_info else None,
-                'size': item.get('size'),
-                'color': item.get('color'),
+                'session_id': item.get('session_id'),
                 'quantity': item['quantity'],
                 'price': float(item['price']),
-                'image_url': product_info.get('image_url') if product_info else None,
-                'description': product_info.get('description') if product_info else None
+                'size': item.get('size'),
+                'color': item.get('color'),
+                'products': {
+                    'name': product_info.get('name') if product_info else None,
+                    'image_url': image_url,
+                    'image_urls': image_urls if isinstance(image_urls, list) else [],
+                    'description': product_info.get('description') if product_info else None
+                }
             })
         
         subtotal = sum(float(item['price']) * item['quantity'] for item in items)

@@ -1,17 +1,194 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useMemo } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Tag, ArrowRight } from "lucide-react"
+import { Tag, ArrowRight, Loader2 } from "lucide-react"
+import { createOrder, validatePromoCode } from "@/lib/api"
+import { toast } from "sonner"
 
-export function OrderSummary() {
+interface OrderSummaryProps {
+  sessionId: string
+  cartData?: any
+  deliveryData?: any
+}
+
+export function OrderSummary({ sessionId, cartData, deliveryData }: OrderSummaryProps) {
+  const router = useRouter()
   const [promoCode, setPromoCode] = useState("")
+  const [appliedPromoCode, setAppliedPromoCode] = useState<any>(null)
+  const [applyingPromo, setApplyingPromo] = useState(false)
+  const [processing, setProcessing] = useState(false)
 
-  const subtotal = 565
-  const discount = 113
+  // Calculate totals from cart data
+  const subtotal = cartData?.subtotal || 0
   const deliveryFee = 15
-  const total = subtotal - discount + deliveryFee
+
+  // Calculate discount based on promo code using useMemo to ensure recalculation
+  const discount = useMemo(() => {
+    if (!appliedPromoCode) {
+      console.log('No promo code applied')
+      return 0
+    }
+    
+    if (!subtotal || subtotal <= 0) {
+      console.log('Invalid subtotal:', subtotal)
+      return 0
+    }
+    
+    // Parse discount value - handle both string and number
+    const discountValue = typeof appliedPromoCode.discount === 'string' 
+      ? parseFloat(appliedPromoCode.discount) 
+      : Number(appliedPromoCode.discount) || 0
+    
+    let calculatedDiscount = 0
+    
+    if (appliedPromoCode.type === 'percentage') {
+      calculatedDiscount = (subtotal * discountValue) / 100
+    } else if (appliedPromoCode.type === 'amount' || appliedPromoCode.type === 'fixed') {
+      // For fixed amount, don't exceed subtotal
+      calculatedDiscount = Math.min(discountValue, subtotal)
+    }
+    
+    console.log('Discount calculation:', {
+      appliedPromoCode,
+      discountValue,
+      type: appliedPromoCode.type,
+      subtotal,
+      calculatedDiscount,
+      finalDiscount: Math.max(0, calculatedDiscount)
+    })
+    
+    return Math.max(0, Math.round(calculatedDiscount * 100) / 100) // Round to 2 decimal places
+  }, [appliedPromoCode, subtotal])
+
+  const total = Math.max(0, subtotal - discount + deliveryFee)
+
+  const handleApplyPromoCode = async () => {
+    if (!promoCode.trim()) {
+      toast.error("Please enter a promo code")
+      return
+    }
+
+    setApplyingPromo(true)
+    try {
+      // Trim and uppercase the code for consistency
+      const codeToValidate = promoCode.trim().toUpperCase()
+      const response = await validatePromoCode(codeToValidate)
+      console.log('Promo code validation response:', response)
+      if (response.success && response.data) {
+        console.log('Setting applied promo code:', response.data)
+        setAppliedPromoCode(response.data)
+        toast.success("Promo code applied successfully!")
+      } else {
+        console.log('Promo code validation failed:', response.message)
+        toast.error(response.message || "Invalid promo code")
+        setAppliedPromoCode(null)
+      }
+    } catch (error) {
+      console.error('Promo code validation error:', error)
+      toast.error("Failed to validate promo code")
+      setAppliedPromoCode(null)
+    } finally {
+      setApplyingPromo(false)
+    }
+  }
+
+  const isFormValid = () => {
+    if (!deliveryData) return false
+    
+    const requiredFields = ['full_name', 'email', 'phone_number', 'district', 'thana', 'full_address']
+    const missingFields = requiredFields.filter(field => !deliveryData[field] || deliveryData[field].trim() === '')
+    
+    if (missingFields.length > 0) {
+      toast.error(`Please fill in all required fields: ${missingFields.join(', ')}`)
+      return false
+    }
+
+    if (!deliveryData.isEmailValid) {
+      toast.error("Please enter a valid email address")
+      return false
+    }
+
+    if (!deliveryData.isPhoneNumberValid) {
+      toast.error("Please enter a valid phone number (format: 01XXX2XXXXXXXX)")
+      return false
+    }
+
+    return true
+  }
+
+  const handleProceed = async () => {
+    if (!isFormValid()) {
+      return
+    }
+
+    if (!cartData || !cartData.items || cartData.items.length === 0) {
+      toast.error("Your cart is empty")
+      return
+    }
+
+    setProcessing(true)
+    try {
+      // Get user_id from localStorage if user is logged in
+      let userId: string | null = null
+      const userData = localStorage.getItem('user')
+      if (userData) {
+        try {
+          const user = JSON.parse(userData)
+          userId = user.id || user.user_id || null
+        } catch (e) {
+          console.error('Failed to parse user data:', e)
+        }
+      }
+
+      const orderData: any = {
+        session_id: sessionId,
+        customer: {
+          full_name: deliveryData.full_name,
+          email: deliveryData.email,
+          phone_number: deliveryData.phone_number,
+          district: deliveryData.district,
+          thana: deliveryData.thana,
+          full_address: deliveryData.full_address
+        },
+        delivery_fee: deliveryFee
+      }
+
+      // Add user_id if user is logged in
+      if (userId) {
+        orderData.user_id = userId
+      }
+
+      // Add discount if promo code is applied
+      if (appliedPromoCode) {
+        if (appliedPromoCode.type === 'percentage') {
+          orderData.discount_percentage = appliedPromoCode.discount
+        } else if (appliedPromoCode.type === 'amount') {
+          orderData.discount_amount = appliedPromoCode.discount
+        }
+      }
+
+      console.log('Creating order with data:', orderData)
+      const response = await createOrder(orderData)
+
+      if (response.success) {
+        toast.success("Order placed successfully!")
+        // Redirect to orders page and force refresh
+        setTimeout(() => {
+          window.location.href = '/orders'
+        }, 1500)
+      } else {
+        toast.error(response.message || "Failed to create order")
+      }
+    } catch (error) {
+      toast.error("An error occurred while placing the order")
+      console.error(error)
+    } finally {
+      setProcessing(false)
+    }
+  }
 
   return (
     <div className="border border-border rounded-lg p-6 bg-card">
@@ -21,45 +198,77 @@ export function OrderSummary() {
       <div className="space-y-4 mb-6">
         <div className="flex justify-between text-muted-foreground">
           <span>Subtotal</span>
-          <span className="font-semibold text-foreground">${subtotal}</span>
+          <span className="font-semibold text-foreground">${subtotal.toFixed(2)}</span>
         </div>
-        <div className="flex justify-between text-muted-foreground">
-          <span>Discount (-20%)</span>
-          <span className="font-semibold text-red-500">-${discount}</span>
-        </div>
+        {appliedPromoCode && discount > 0 && (
+          <div className="flex justify-between text-muted-foreground">
+            <span>Discount {appliedPromoCode?.type === 'percentage' ? `(-${appliedPromoCode.discount}%)` : `(${appliedPromoCode.code})`}</span>
+            <span className="font-semibold text-red-500">-${discount.toFixed(2)}</span>
+          </div>
+        )}
         <div className="flex justify-between text-muted-foreground">
           <span>Delivery Fee</span>
-          <span className="font-semibold text-foreground">${deliveryFee}</span>
+          <span className="font-semibold text-foreground">${deliveryFee.toFixed(2)}</span>
         </div>
 
         <div className="border-t border-border pt-4">
           <div className="flex justify-between text-lg">
             <span className="font-semibold">Total</span>
-            <span className="font-bold">${total}</span>
+            <span className="font-bold">${total.toFixed(2)}</span>
           </div>
         </div>
       </div>
 
       {/* Promo Code */}
-      <div className="flex gap-2 mb-6">
-        <div className="relative flex-1">
-          <Tag className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Add promo code"
-            value={promoCode}
-            onChange={(e) => setPromoCode(e.target.value)}
-            className="pl-10 bg-background"
-          />
+      <div className="mb-6">
+        <div className="flex gap-2 mb-2">
+          <div className="relative flex-1">
+            <Tag className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Add promo code"
+              value={promoCode}
+              onChange={(e) => {
+                setPromoCode(e.target.value)
+                if (appliedPromoCode) {
+                  setAppliedPromoCode(null)
+                }
+              }}
+              className="pl-10 bg-background"
+              disabled={applyingPromo}
+            />
+          </div>
+          <Button 
+            variant="default" 
+            className="px-6"
+            onClick={handleApplyPromoCode}
+            disabled={applyingPromo || !promoCode.trim()}
+          >
+            {applyingPromo ? <Loader2 className="h-4 w-4 animate-spin" /> : "Apply"}
+          </Button>
         </div>
-        <Button variant="default" className="px-6">
-          Apply
-        </Button>
+        {appliedPromoCode && (
+          <p className="text-sm text-green-600">Promo code "{appliedPromoCode.code}" applied!</p>
+        )}
       </div>
 
       {/* Proceed Button */}
-      <Button className="w-full h-12 text-base" size="lg">
-        Proceed
-        <ArrowRight className="ml-2 h-5 w-5" />
+      <Button 
+        className="w-full h-12 text-base" 
+        size="lg"
+        onClick={handleProceed}
+        disabled={processing || !cartData || cartData.items?.length === 0}
+      >
+        {processing ? (
+          <>
+            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+            Processing...
+          </>
+        ) : (
+          <>
+            Proceed
+            <ArrowRight className="ml-2 h-5 w-5" />
+          </>
+        )}
       </Button>
     </div>
   )

@@ -126,14 +126,26 @@ export function ProductsGrid() {
     fetchProducts()
   }, [currentPage, sortBy, searchParams])
 
-  const formatProductForCard = (product: Product) => ({
-    id: product.id,
-    name: product.name,
-    price: product.price,
-    originalPrice: product.original_price || null,
-    image: product.image_urls?.[0] || product.image_url || product.image?.[0] || "/placeholder.svg",
-    rating: product.rating || 4.5,
-  })
+  const formatProductForCard = (product: Product) => {
+    // Handle different image field names from backend
+    let imageUrl = "/placeholder.svg"
+    if (product.image && Array.isArray(product.image) && product.image.length > 0) {
+      imageUrl = product.image[0]
+    } else if (product.image_urls && Array.isArray(product.image_urls) && product.image_urls.length > 0) {
+      imageUrl = product.image_urls[0]
+    } else if (product.image_url) {
+      imageUrl = product.image_url
+    }
+    
+    return {
+      id: product.id,
+      name: product.name,
+      price: product.price,
+      originalPrice: product.original_price || null,
+      image: imageUrl,
+      rating: product.rating || 4.5,
+    }
+  }
 
   // Generate visible page numbers
   const getVisiblePages = () => {
