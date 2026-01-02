@@ -195,11 +195,30 @@ export function SizeChartManagement() {
         setNewColumnKey("");
         setNewColumnName("");
         setNewColumnUnit("cm");
-        // Refresh template
-        const refreshed = await getSizeChartTemplate(selectedTemplate.id);
-        if (refreshed.success && refreshed.data) {
-          setSelectedTemplate(refreshed.data);
+        // Refresh template to show new column
+        try {
+          const refreshed = await getSizeChartTemplate(selectedTemplate.id);
+          if (refreshed.success && refreshed.data) {
+            setSelectedTemplate(refreshed.data);
+            console.log('Template refreshed successfully after adding column');
+          } else {
+            console.error('Failed to refresh template:', refreshed.error);
+            // Still update locally
+            if (response.data) {
+              const updatedColumns = [...(selectedTemplate.columns || []), response.data];
+              setSelectedTemplate({ ...selectedTemplate, columns: updatedColumns });
+            }
+          }
+        } catch (refreshError) {
+          console.error('Error refreshing template:', refreshError);
+          if (response.data) {
+            const updatedColumns = [...(selectedTemplate.columns || []), response.data];
+            setSelectedTemplate({ ...selectedTemplate, columns: updatedColumns });
+          }
         }
+      } else {
+        alert(`Failed to add column: ${response.error || 'Unknown error'}`);
+        console.error('Add column error:', response);
       }
     } catch (err) {
       alert('Failed to add column');
