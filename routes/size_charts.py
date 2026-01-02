@@ -103,6 +103,19 @@ def admin_size_chart_add_row(template_id):
         if not template_check.data:
             return jsonify({"success": False, "error": f"Template with id {template_id} not found"}), 404
         
+        # Check if size_label already exists for this template
+        existing_row_check = supabase.table('size_chart_rows')\
+            .select('id')\
+            .eq('template_id', template_id)\
+            .eq('size_label', size_label.strip())\
+            .execute()
+        
+        if existing_row_check.data and len(existing_row_check.data) > 0:
+            return jsonify({
+                "success": False, 
+                "error": f"Size label '{size_label.strip()}' already exists for this template"
+            }), 400
+        
         # Get max sort_order for this template to append at the end
         sort_order = data.get('sort_order')
         if sort_order is None:
