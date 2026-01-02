@@ -77,6 +77,30 @@ def admin_product_detail(product_id):
             
             product_data = response.data[0]
             
+            # Calculate total sold and revenue from order_items
+            try:
+                order_items_response = supabase.table('order_items')\
+                    .select('quantity, price')\
+                    .eq('product_id', product_id)\
+                    .execute()
+                
+                total_sold = 0
+                total_revenue = 0.0
+                
+                if order_items_response.data:
+                    for item in order_items_response.data:
+                        quantity = item.get('quantity', 0)
+                        price = float(item.get('price', 0))
+                        total_sold += quantity
+                        total_revenue += price * quantity
+                
+                product_data['sold'] = total_sold
+                product_data['total_revenue'] = round(total_revenue, 2)
+            except Exception as e:
+                print(f"Warning: Could not calculate sold/revenue: {e}")
+                product_data['sold'] = 0
+                product_data['total_revenue'] = 0.0
+            
             if product_data.get('size_chart_template_id'):
                 try:
                     product_sizes_response = supabase.table('product_sizes')\

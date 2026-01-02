@@ -218,9 +218,12 @@ export function ProductDetail() {
     }
   };
 
-  const totalStock = sizeStocks.reduce((sum, s) => sum + s.stock, 0);
+  // Calculate total stock - use size stocks if available, otherwise use product.stock
+  const totalStock = sizeStocks.length > 0 
+    ? sizeStocks.reduce((sum, s) => sum + s.stock, 0)
+    : (product?.stock || 0);
   const totalSold = product?.sold || 0;
-  const totalRevenue = totalSold * (product?.price || 0);
+  const totalRevenue = product?.total_revenue || (totalSold * (product?.price || 0));
 
   if (loading) {
     return (
@@ -510,10 +513,14 @@ export function ProductDetail() {
                   </Table>
                   
                   {/* Total Stock Summary */}
-                  <div className="bg-[#576D64]/10 px-4 py-3 border-t">
+                  <div className="bg-[#576D64]/10 px-4 py-3 border-t space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-[#576D64]">Total Stock:</span>
                       <span className="text-xl font-bold text-[#576D64]">{totalStock} units</span>
+                    </div>
+                    <div className="flex items-center justify-between border-t pt-2">
+                      <span className="font-semibold text-[#576D64]">Current Price:</span>
+                      <span className="text-xl font-bold text-[#576D64]">${product.price?.toFixed(2) || '0.00'}</span>
                     </div>
                   </div>
                 </div>

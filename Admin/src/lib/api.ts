@@ -20,12 +20,22 @@ export interface Product {
   description?: string;
   category?: string;
   price: number;
+  original_price?: number;
   stock?: number;
+  sold?: number;
+  total_revenue?: number;
   image_url?: string;
   image_urls?: string[];
   status?: string;
+  size?: string[];
   created_at?: string;
   updated_at?: string;
+  size_chart_template_id?: number;
+  size_stocks?: Array<{
+    row_id: number;
+    size_label: string;
+    stock: number;
+  }>;
 }
 
 export interface Order {
