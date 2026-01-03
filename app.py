@@ -2,7 +2,7 @@
 Main Flask application file.
 This file imports and registers all route blueprints.
 """
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 # Import route blueprints
@@ -43,7 +43,6 @@ def after_request(response):
 @app.before_request
 def handle_preflight():
     """Handle CORS preflight requests"""
-    from flask import request
     if request.method == "OPTIONS":
         response = jsonify({})
         response.headers.add('Access-Control-Allow-Origin', '*')
