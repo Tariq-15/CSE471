@@ -6,6 +6,25 @@ from utils.supabase_client import get_supabase
 bp = Blueprint('products', __name__, url_prefix='/api/products')
 supabase = get_supabase()
 
+# Add CORS headers to all product routes
+@bp.after_request
+def after_request(response):
+    """Add CORS headers to product route responses"""
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
+    return response
+
+@bp.before_request
+def handle_preflight():
+    """Handle CORS preflight requests"""
+    if request.method == "OPTIONS":
+        response = jsonify({})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
+        return response
+
 
 @bp.route('/filter', methods=['GET'])
 def get_products_filtered():
