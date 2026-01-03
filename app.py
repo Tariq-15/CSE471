@@ -21,24 +21,13 @@ from routes import (
 )
 
 app = Flask(__name__)
-# Configure CORS to allow requests from frontend
-CORS(app, resources={
-    r"/api/*": {
-        "origins": [
-            "https://frontend-tariquzzamans-projects.vercel.app",
-            "https://frontend-*.vercel.app",
-            "http://localhost:3000",
-            "http://localhost:1581"
-        ],
-        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"]
-    },
-    r"/*": {
-        "origins": "*",
-        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"]
-    }
-})
+# Configure CORS to allow requests from all origins (needed for Vercel deployments)
+CORS(app, 
+     origins="*",
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+     allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
+     supports_credentials=False
+)
 
 # Root route
 @app.route('/', methods=['GET'])
