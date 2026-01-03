@@ -21,7 +21,24 @@ from routes import (
 )
 
 app = Flask(__name__)
-CORS(app)
+# Configure CORS to allow requests from frontend
+CORS(app, resources={
+    r"/api/*": {
+        "origins": [
+            "https://frontend-tariquzzamans-projects.vercel.app",
+            "https://frontend-*.vercel.app",
+            "http://localhost:3000",
+            "http://localhost:1581"
+        ],
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+    },
+    r"/*": {
+        "origins": "*",
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+    }
+})
 
 # Root route
 @app.route('/', methods=['GET'])
