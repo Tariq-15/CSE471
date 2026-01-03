@@ -258,7 +258,8 @@ export function ProductDetails({ productId }: ProductDetailsProps) {
   const sizes = hasSizeChart 
     ? (sizeStocks.length > 0 ? sizeStocks.map(s => s.size) : (product.size || []))
     : []
-  const rating = product.rating || 4.5
+  // Use actual rating from product (calculated from reviews)
+  const rating = product.rating || 0
   const discountPercent = product.original_price && product.original_price > product.price
     ? Math.round((1 - product.price / product.original_price) * 100)
     : 0

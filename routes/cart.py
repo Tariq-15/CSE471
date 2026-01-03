@@ -125,7 +125,7 @@ def add_to_cart():
             "cart_item_id": cart_item_id
         }), 201
             
-    except Exception as e:
+    except Exception as e: 
         return jsonify({
             "success": False,
             "error": str(e)
