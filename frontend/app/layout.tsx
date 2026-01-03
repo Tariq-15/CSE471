@@ -32,6 +32,9 @@ export const metadata: Metadata = {
   },
 }
 
+// Force dynamic rendering for all pages to avoid useSearchParams issues
+export const dynamic = 'force-dynamic'
+
 export default function RootLayout({
   children,
 }: Readonly<{

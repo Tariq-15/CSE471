@@ -23,3 +23,4 @@ def is_phone_verified(phone_number: str) -> tuple[bool, str]:
     
     return True, "Phone number is verified"
 
+

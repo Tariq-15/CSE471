@@ -1,12 +1,15 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Header } from "@/components/header"
+import { HeaderWrapper } from "@/components/header-wrapper"
 import { Footer } from "@/components/footer"
 import { CartItems } from "@/components/cart-items"
 import { OrderSummary } from "@/components/order-summary"
 import { DeliveryForm } from "@/components/delivery-form"
 import Link from "next/link"
+
+// Force dynamic rendering
+export const dynamic = 'force-dynamic'
 
 export default function CheckoutPage() {
   const [sessionId, setSessionId] = useState<string | null>(null)
@@ -37,7 +40,7 @@ export default function CheckoutPage() {
 
   return (
     <div className="min-h-screen">
-      <Header />
+      <HeaderWrapper />
 
       <main className="container mx-auto px-4 py-8">
         {/* Breadcrumb */}
