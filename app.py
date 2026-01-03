@@ -29,6 +29,29 @@ CORS(app,
      supports_credentials=False
 )
 
+# Add explicit CORS headers for all responses (needed for Vercel serverless)
+@app.after_request
+def after_request(response):
+    """Add CORS headers to all responses"""
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
+    response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH')
+    response.headers.add('Access-Control-Max-Age', '3600')
+    return response
+
+# Handle OPTIONS requests explicitly
+@app.before_request
+def handle_preflight():
+    """Handle CORS preflight requests"""
+    from flask import request
+    if request.method == "OPTIONS":
+        response = jsonify({})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
+        response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH')
+        response.headers.add('Access-Control-Max-Age', '3600')
+        return response
+
 # Root route
 @app.route('/', methods=['GET'])
 def root():
