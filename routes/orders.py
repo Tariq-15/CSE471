@@ -88,46 +88,69 @@ def create_order():
         
         total = subtotal - discount + float(delivery_fee)
         
-        # Insert customer with error handling
+        user_id = data.get('user_id')
+        phone_number = customer_data.get('phone_number')
+        
+        # Insert or update customer with error handling
         try:
-            customer_response = supabase.table('customers').insert({
-                'full_name': customer_data.get('full_name'),
-                'email': customer_data.get('email'),
-                'phone_number': customer_data.get('phone_number'),
-                'district': customer_data.get('district'),
-                'thana': customer_data.get('thana'),
-                'full_address': customer_data.get('full_address')
-            }).execute()
+            # Check if customer already exists by email
+            existing_customer = supabase.table('customers')\
+                .select('id, user_id')\
+                .eq('email', customer_data.get('email'))\
+                .execute()
             
-            if not customer_response.data:
-                return jsonify({
-                    "success": False,
-                    "message": "Failed to create customer record"
-                }), 500
-                
-            customer_id = customer_response.data[0]['id']
-        except Exception as e:
-            error_msg = str(e)
-            # Check if it's a unique constraint violation (duplicate email)
-            if 'duplicate' in error_msg.lower() or 'unique' in error_msg.lower():
-                # Try to get existing customer by email
-                existing_customer = supabase.table('customers')\
-                    .select('id')\
-                    .eq('email', customer_data.get('email'))\
+            if existing_customer.data:
+                # Customer exists, update user_id if provided and not already set
+                customer_id = existing_customer.data[0]['id']
+                if user_id and not existing_customer.data[0].get('user_id'):
+                    # Update customer with user_id if user is logged in
+                    supabase.table('customers')\
+                        .update({'user_id': user_id})\
+                        .eq('id', customer_id)\
+                        .execute()
+                # Update other customer info
+                supabase.table('customers')\
+                    .update({
+                        'full_name': customer_data.get('full_name'),
+                        'phone_number': phone_number,
+                        'district': customer_data.get('district'),
+                        'thana': customer_data.get('thana'),
+                        'full_address': customer_data.get('full_address')
+                    })\
+                    .eq('id', customer_id)\
                     .execute()
-                if existing_customer.data:
-                    customer_id = existing_customer.data[0]['id']
-                else:
+            else:
+                # Create new customer
+                customer_insert_data = {
+                    'full_name': customer_data.get('full_name'),
+                    'email': customer_data.get('email'),
+                    'phone_number': phone_number,
+                    'district': customer_data.get('district'),
+                    'thana': customer_data.get('thana'),
+                    'full_address': customer_data.get('full_address')
+                }
+                # Add user_id if user is logged in
+                if user_id:
+                    customer_insert_data['user_id'] = user_id
+                
+                customer_response = supabase.table('customers').insert(customer_insert_data).execute()
+                
+                if not customer_response.data:
                     return jsonify({
                         "success": False,
-                        "message": f"Customer creation failed: {error_msg}"
-                    }), 400
-            else:
-                return jsonify({
-                    "success": False,
-                    "message": f"Customer creation failed: {error_msg}"
-                }), 400
-        user_id = data.get('user_id')
+                        "message": "Failed to create customer record"
+                    }), 500
+                    
+                customer_id = customer_response.data[0]['id']
+        except Exception as e:
+            error_msg = str(e)
+            import traceback
+            error_trace = traceback.format_exc()
+            print(f"Customer creation error: {error_trace}")
+            return jsonify({
+                "success": False,
+                "message": f"Customer creation failed: {error_msg}"
+            }), 400
         
         order_data = {
             'customer_id': customer_id,

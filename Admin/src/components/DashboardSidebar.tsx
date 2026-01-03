@@ -45,7 +45,7 @@ export function DashboardSidebar({ activeSection, isCollapsed }: DashboardSideba
             <BarChart3 className="w-5 h-5 text-white" />
           </div>
           {!isCollapsed && (
-            <span className="text-lg font-semibold text-black">Unleashed</span>
+            <span className="text-lg font-semibold text-black">VELORA</span>
           )}
         </Link>
         

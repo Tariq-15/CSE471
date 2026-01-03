@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { TrendingUp, Package, Users, ShoppingCart, AlertTriangle, Loader2 } from "lucide-react";
+import { TrendingUp, Package, Users, ShoppingCart, AlertTriangle, Loader2, CheckCircle } from "lucide-react";
 import { getDashboardStats, getSalesData, getBestSellingProducts, getLowStockItems } from "@/lib/api";
 import type { DashboardStats, SalesData, BestSellingProduct, LowStockItem } from "@/lib/api";
 
@@ -178,31 +178,39 @@ export function DashboardOverview() {
         {/* Best Selling Products */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-black">Best Selling Products</CardTitle>
+            <CardTitle className="flex items-center gap-2 text-black">
+              <TrendingUp className="h-5 w-5 text-[#576D64]" />
+              Best Selling Products
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               {bestSelling.length > 0 ? (
-                bestSelling.map((product) => (
-                  <div key={product.id} className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-2 h-2 bg-[#576D64] rounded-full"></div>
-                      <span className="text-black">{product.name}</span>
+                bestSelling.map((product, index) => (
+                  <div key={product.id} className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg transition-colors">
+                    <div className="flex items-center gap-3 flex-1">
+                      <div className="w-8 h-8 rounded-full bg-[#576D64]/10 flex items-center justify-center">
+                        <span className="text-sm font-semibold text-[#576D64]">#{index + 1}</span>
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-medium text-black">{product.name}</div>
+                        <div className="text-sm text-gray-600">{product.sales} units sold</div>
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-gray-600">{product.sales} sold</span>
                       <Badge 
                         variant={product.stock < 10 ? "destructive" : "secondary"}
                         className="text-xs"
                       >
-                        {product.stock} left
+                        {product.stock} in stock
                       </Badge>
                     </div>
                   </div>
                 ))
               ) : (
-                <div className="text-center text-gray-500 py-4">
-                  No sales data available
+                <div className="text-center text-gray-500 py-8">
+                  <Package className="w-12 h-12 mx-auto mb-2 text-gray-400" />
+                  <p>No sales data available</p>
                 </div>
               )}
             </div>
@@ -258,19 +266,20 @@ export function DashboardOverview() {
             <div className="space-y-3">
               {lowStock.length > 0 ? (
                 lowStock.map((item) => (
-                  <div key={item.id} className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
-                    <div>
+                  <div key={item.id} className="flex items-center justify-between p-3 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors">
+                    <div className="flex-1">
                       <div className="font-medium text-black">{item.name}</div>
-                      <div className="text-sm text-gray-600">{item.category}</div>
+                      <div className="text-sm text-gray-600">{item.category || 'Uncategorized'}</div>
                     </div>
-                    <Badge variant="destructive">
+                    <Badge variant="destructive" className="ml-2">
                       {item.stock} left
                     </Badge>
                   </div>
                 ))
               ) : (
-                <div className="text-center text-gray-500 py-4">
-                  No low stock items
+                <div className="text-center text-gray-500 py-8">
+                  <CheckCircle className="w-12 h-12 mx-auto mb-2 text-green-500" />
+                  <p>All products are well stocked</p>
                 </div>
               )}
             </div>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -8,69 +8,48 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Plus, Search, Edit, Trash2, Copy } from "lucide-react";
-
-const mockDiscounts = [
-  {
-    id: 1,
-    code: "SUMMER20",
-    discount: 20,
-    type: "percentage",
-    expirationDate: "2024-12-31",
-    status: "active",
-    usageCount: 45,
-    usageLimit: 100,
-    minOrderValue: 50
-  },
-  {
-    id: 2,
-    code: "NEWCUSTOMER",
-    discount: 15,
-    type: "percentage",
-    expirationDate: "2024-11-30",
-    status: "active",
-    usageCount: 123,
-    usageLimit: 500,
-    minOrderValue: 30
-  },
-  {
-    id: 3,
-    code: "FREESHIP",
-    discount: 10,
-    type: "fixed",
-    expirationDate: "2024-10-15",
-    status: "active",
-    usageCount: 234,
-    usageLimit: 1000,
-    minOrderValue: 25
-  },
-  {
-    id: 4,
-    code: "FLASH50",
-    discount: 50,
-    type: "percentage",
-    expirationDate: "2024-09-25",
-    status: "expired",
-    usageCount: 89,
-    usageLimit: 100,
-    minOrderValue: 100
-  },
-  {
-    id: 5,
-    code: "WELCOME10",
-    discount: 10,
-    type: "percentage",
-    expirationDate: "2024-10-31",
-    status: "paused",
-    usageCount: 67,
-    usageLimit: 200,
-    minOrderValue: 20
-  }
-];
+import { getDiscounts, createDiscount, updateDiscount, deleteDiscount, type Discount } from "@/lib/api";
+import { toast } from "sonner";
 
 export function DiscountsManagement() {
-  const [discounts, setDiscounts] = useState(mockDiscounts);
+  const [discounts, setDiscounts] = useState<Discount[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingDiscount, setEditingDiscount] = useState<Discount | null>(null);
+  const [loading, setLoading] = useState(true);
+  
+  // Form state
+  const [formData, setFormData] = useState({
+    code: '',
+    discount: '',
+    type: 'percentage',
+    expiration_date: '',
+    status: 'active'
+  });
+
+  useEffect(() => {
+    fetchDiscounts();
+  }, []);
+
+  const fetchDiscounts = async () => {
+    try {
+      setLoading(true);
+      const response = await getDiscounts({ search: searchTerm });
+      if (response.success && response.data) {
+        setDiscounts(response.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch discounts:', error);
+      toast.error('Failed to fetch discounts');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDiscounts();
+  }, [searchTerm]);
 
   const filteredDiscounts = discounts.filter(discount =>
     discount.code.toLowerCase().includes(searchTerm.toLowerCase())
@@ -90,6 +69,7 @@ export function DiscountsManagement() {
   };
 
   const formatDate = (dateString: string) => {
+    if (!dateString) return 'N/A';
     return new Date(dateString).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
@@ -99,6 +79,107 @@ export function DiscountsManagement() {
 
   const copyToClipboard = (code: string) => {
     navigator.clipboard.writeText(code);
+    toast.success('Code copied to clipboard');
+  };
+
+  const handleEditClick = (discount: Discount) => {
+    setEditingDiscount(discount);
+    setFormData({
+      code: discount.code || '',
+      discount: discount.discount?.toString() || '',
+      type: discount.type || 'percentage',
+      expiration_date: discount.expiration_date || '',
+      status: discount.status || 'active'
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  const handleDeleteClick = async (discountId: string) => {
+    if (!confirm('Are you sure you want to delete this discount?')) {
+      return;
+    }
+
+    try {
+      const response = await deleteDiscount(discountId);
+      if (response.success) {
+        toast.success('Discount deleted successfully');
+        fetchDiscounts();
+      } else {
+        toast.error(response.error || 'Failed to delete discount');
+      }
+    } catch (error) {
+      console.error('Delete discount error:', error);
+      toast.error('Failed to delete discount');
+    }
+  };
+
+  const handleCreateDiscount = async () => {
+    if (!formData.code || !formData.discount) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    try {
+      const response = await createDiscount({
+        code: formData.code,
+        discount: parseFloat(formData.discount),
+        type: formData.type,
+        expiration_date: formData.expiration_date,
+        status: formData.status
+      });
+
+      if (response.success) {
+        toast.success('Discount created successfully');
+        setIsAddDialogOpen(false);
+        resetForm();
+        fetchDiscounts();
+      } else {
+        toast.error(response.error || 'Failed to create discount');
+      }
+    } catch (error) {
+      console.error('Create discount error:', error);
+      toast.error('Failed to create discount');
+    }
+  };
+
+  const handleUpdateDiscount = async () => {
+    if (!editingDiscount || !formData.code || !formData.discount) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    try {
+      const response = await updateDiscount(editingDiscount.id.toString(), {
+        code: formData.code,
+        discount: parseFloat(formData.discount),
+        type: formData.type,
+        expiration_date: formData.expiration_date,
+        status: formData.status
+      });
+
+      if (response.success) {
+        toast.success('Discount updated successfully');
+        setIsEditDialogOpen(false);
+        setEditingDiscount(null);
+        resetForm();
+        fetchDiscounts();
+      } else {
+        toast.error(response.error || 'Failed to update discount');
+      }
+    } catch (error) {
+      console.error('Update discount error:', error);
+      toast.error('Failed to update discount');
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      code: '',
+      discount: '',
+      type: 'percentage',
+      expiration_date: '',
+      status: 'active'
+    });
   };
 
   return (
@@ -119,12 +200,17 @@ export function DiscountsManagement() {
             <div className="space-y-4">
               <div>
                 <Label htmlFor="discount-code">Discount Code</Label>
-                <Input id="discount-code" placeholder="e.g., SAVE20" />
+                <Input 
+                  id="discount-code" 
+                  placeholder="e.g., SAVE20"
+                  value={formData.code}
+                  onChange={(e) => setFormData({...formData, code: e.target.value})}
+                />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="discount-type">Discount Type</Label>
-                  <Select>
+                  <Select value={formData.type} onValueChange={(value: string) => setFormData({...formData, type: value})}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select type" />
                     </SelectTrigger>
@@ -136,34 +222,51 @@ export function DiscountsManagement() {
                 </div>
                 <div>
                   <Label htmlFor="discount-value">Value</Label>
-                  <Input id="discount-value" type="number" placeholder="20" />
+                  <Input 
+                    id="discount-value" 
+                    type="number" 
+                    placeholder="20"
+                    value={formData.discount}
+                    onChange={(e) => setFormData({...formData, discount: e.target.value})}
+                  />
                 </div>
               </div>
               <div>
                 <Label htmlFor="expiration-date">Expiration Date</Label>
-                <Input id="expiration-date" type="date" />
+                <Input 
+                  id="expiration-date" 
+                  type="date"
+                  value={formData.expiration_date}
+                  onChange={(e) => setFormData({...formData, expiration_date: e.target.value})}
+                />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="usage-limit">Usage Limit</Label>
-                  <Input id="usage-limit" type="number" placeholder="100" />
-                </div>
-                <div>
-                  <Label htmlFor="min-order">Min Order Value (৳)</Label>
-                  <Input id="min-order" type="number" placeholder="50" />
-                </div>
+              <div>
+                <Label htmlFor="status">Status</Label>
+                <Select value={formData.status} onValueChange={(value: string) => setFormData({...formData, status: value})}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="paused">Paused</SelectItem>
+                    <SelectItem value="expired">Expired</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="flex gap-2">
                 <Button 
                   className="flex-1 bg-[#576D64] hover:bg-[#465A52]"
-                  onClick={() => setIsAddDialogOpen(false)}
+                  onClick={handleCreateDiscount}
                 >
                   Create Discount
                 </Button>
                 <Button 
                   variant="outline" 
                   className="flex-1"
-                  onClick={() => setIsAddDialogOpen(false)}
+                  onClick={() => {
+                    setIsAddDialogOpen(false);
+                    resetForm();
+                  }}
                 >
                   Cancel
                 </Button>
@@ -193,58 +296,75 @@ export function DiscountsManagement() {
               <TableRow>
                 <TableHead>Code</TableHead>
                 <TableHead>Discount</TableHead>
-                <TableHead>Usage</TableHead>
-                <TableHead>Min Order</TableHead>
                 <TableHead>Expires</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredDiscounts.map((discount) => (
-                <TableRow key={discount.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <code className="px-2 py-1 bg-gray-100 rounded text-sm font-mono text-black">
-                        {discount.code}
-                      </code>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => copyToClipboard(discount.code)}
-                        className="h-6 w-6 p-0"
-                      >
-                        <Copy className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-black font-medium">
-                    {discount.discount}{discount.type === 'percentage' ? '%' : '৳'} off
-                  </TableCell>
-                  <TableCell className="text-gray-600">
-                    {discount.usageCount} / {discount.usageLimit}
-                  </TableCell>
-                  <TableCell className="text-gray-600">৳{discount.minOrderValue}</TableCell>
-                  <TableCell className="text-gray-600">{formatDate(discount.expirationDate)}</TableCell>
-                  <TableCell>{getStatusBadge(discount.status, discount.expirationDate)}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Button variant="ghost" size="sm">
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700">
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                    Loading discounts...
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : discounts.length > 0 ? (
+                discounts.map((discount) => (
+                  <TableRow key={discount.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <code className="px-2 py-1 bg-gray-100 rounded text-sm font-mono text-black">
+                          {discount.code}
+                        </code>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => copyToClipboard(discount.code)}
+                          className="h-6 w-6 p-0"
+                        >
+                          <Copy className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-black font-medium">
+                      {discount.discount}{discount.type === 'percentage' ? '%' : '৳'} off
+                    </TableCell>
+                    <TableCell className="text-gray-600">{formatDate(discount.expiration_date || '')}</TableCell>
+                    <TableCell>{getStatusBadge(discount.status || 'inactive', discount.expiration_date || '')}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => handleEditClick(discount)}
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="text-red-600 hover:text-red-700"
+                          onClick={() => handleDeleteClick(discount.id.toString())}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                    No discounts found
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
 
           <div className="flex items-center justify-between mt-4">
             <p className="text-sm text-gray-600">
-              Showing {filteredDiscounts.length} of {discounts.length} discount codes
+              Showing {discounts.length} discount codes
             </p>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" disabled>Previous</Button>
@@ -254,6 +374,91 @@ export function DiscountsManagement() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Edit Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Discount</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="edit-discount-code">Discount Code</Label>
+              <Input 
+                id="edit-discount-code" 
+                placeholder="e.g., SAVE20"
+                value={formData.code}
+                onChange={(e) => setFormData({...formData, code: e.target.value})}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit-discount-type">Discount Type</Label>
+                <Select value={formData.type} onValueChange={(value: string) => setFormData({...formData, type: value})}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="percentage">Percentage</SelectItem>
+                    <SelectItem value="fixed">Fixed Amount</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="edit-discount-value">Value</Label>
+                <Input 
+                  id="edit-discount-value" 
+                  type="number" 
+                  placeholder="20"
+                  value={formData.discount}
+                  onChange={(e) => setFormData({...formData, discount: e.target.value})}
+                />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="edit-expiration-date">Expiration Date</Label>
+              <Input 
+                id="edit-expiration-date" 
+                type="date"
+                value={formData.expiration_date}
+                onChange={(e) => setFormData({...formData, expiration_date: e.target.value})}
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-status">Status</Label>
+              <Select value={formData.status} onValueChange={(value: string) => setFormData({...formData, status: value})}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="paused">Paused</SelectItem>
+                  <SelectItem value="expired">Expired</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex gap-2">
+              <Button 
+                className="flex-1 bg-[#576D64] hover:bg-[#465A52]"
+                onClick={handleUpdateDiscount}
+              >
+                Update Discount
+              </Button>
+              <Button 
+                variant="outline" 
+                className="flex-1"
+                onClick={() => {
+                  setIsEditDialogOpen(false);
+                  setEditingDiscount(null);
+                  resetForm();
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

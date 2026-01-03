@@ -307,6 +307,32 @@ export async function getCustomerStats(): Promise<ApiResponse<{
   return fetchApi('/api/admin/customers/stats');
 }
 
+// Users APIs (all registered users including Google authenticated)
+export interface User {
+  id: string;
+  email: string;
+  full_name: string;
+  phone_number?: string;
+  created_at?: string;
+  auth_provider: 'email' | 'google';
+  orders_count: number;
+  total_spent: number;
+  has_profile: boolean;
+}
+
+export async function getUsers(params?: {
+  page?: number;
+  limit?: number;
+  search?: string;
+}): Promise<ApiResponse<User[]>> {
+  const searchParams = new URLSearchParams();
+  if (params?.page) searchParams.set('page', String(params.page));
+  if (params?.limit) searchParams.set('limit', String(params.limit));
+  if (params?.search) searchParams.set('search', params.search);
+  
+  return fetchApi<User[]>(`/api/admin/users?${searchParams.toString()}`);
+}
+
 // Discounts APIs
 export async function getDiscounts(params?: {
   page?: number;

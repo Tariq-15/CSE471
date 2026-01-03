@@ -35,11 +35,7 @@ def user_profile():
                         "user_id": user_id,
                         "first_name": None,
                         "last_name": None,
-                        "phone_number": None,
-                        "email_notifications": True,
-                        "order_updates": True,
-                        "promotional_emails": False,
-                        "sms_notifications": False
+                        "phone_number": None
                     }
                 }), 200
         
@@ -60,11 +56,7 @@ def user_profile():
             update_data = {
                 "first_name": data.get('first_name'),
                 "last_name": data.get('last_name'),
-                "phone_number": data.get('phone_number'),
-                "email_notifications": data.get('email_notifications', True),
-                "order_updates": data.get('order_updates', True),
-                "promotional_emails": data.get('promotional_emails', False),
-                "sms_notifications": data.get('sms_notifications', False)
+                "phone_number": data.get('phone_number')
             }
             
             if existing.data:

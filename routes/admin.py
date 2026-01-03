@@ -417,7 +417,6 @@ def admin_customers():
         page = request.args.get('page', 1, type=int)
         limit = request.args.get('limit', 20, type=int)
         search = request.args.get('search', '')
-        customer_type = request.args.get('customer_type', 'all')
         offset = (page - 1) * limit
         
         query = supabase.table('customers').select('*', count='exact')
@@ -437,14 +436,12 @@ def admin_customers():
             orders_count = len(orders_response.data) if orders_response.data else 0
             total_spent = sum(float(order.get('total', 0)) for order in (orders_response.data or []))
             
-            c['customer_type'] = 'verified' if c.get('user_id') else 'cold'
             c['orders_count'] = orders_count
             c['total_spent'] = round(total_spent, 2)
             c['name'] = c.get('full_name', 'Unknown')
             c['joinDate'] = c.get('created_at', '')
             
-            if customer_type == 'all' or c['customer_type'] == customer_type:
-                customers.append(c)
+            customers.append(c)
         
         return jsonify({
             "success": True,
@@ -471,6 +468,7 @@ def admin_customers_stats():
         customers = response.data or []
         
         new_this_month = sum(1 for c in customers if c.get('created_at', '').startswith(current_month))
+        registered_count = len([c for c in customers if c.get('user_id')])
         
         # Calculate total revenue from all orders
         orders_response = supabase.table('orders').select('total').execute()
@@ -480,12 +478,164 @@ def admin_customers_stats():
             "success": True,
             "data": {
                 "total": response.count or len(customers),
-                "active": len([c for c in customers if c.get('user_id')]),
+                "active": registered_count,  # Registered customers
+                "registered": registered_count,
+                "unregistered": len(customers) - registered_count,
                 "new_this_month": new_this_month,
                 "total_revenue": round(total_revenue, 2)
             }
         }), 200
     except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# Admin Users Routes
+@bp.route('/users', methods=['GET'])
+def admin_users():
+    """Get all users including Google authenticated users"""
+    try:
+        page = request.args.get('page', 1, type=int)
+        limit = request.args.get('limit', 100, type=int)  # Increased default limit to show all users
+        search = request.args.get('search', '')
+        offset = (page - 1) * limit
+        
+        # Collect all unique user_ids from multiple sources
+        user_ids_set = set()
+        users_dict = {}
+        
+        # 1. Get users from user_profiles table (all 7 users)
+        profiles_response = supabase.table('user_profiles').select('user_id, first_name, last_name, phone_number, created_at').execute()
+        for profile in (profiles_response.data or []):
+            user_id = profile.get('user_id')
+            if user_id:
+                user_ids_set.add(user_id)
+                users_dict[user_id] = {
+                    'id': user_id,
+                    'email': None,
+                    'full_name': f"{profile.get('first_name', '')} {profile.get('last_name', '')}".strip() or None,
+                    'phone_number': profile.get('phone_number'),
+                    'created_at': profile.get('created_at'),
+                    'auth_provider': 'email',
+                    'source': 'user_profiles'
+                }
+        
+        # 2. Get users from customers table who have user_id (registered users, including Google)
+        customers_response = supabase.table('customers')\
+            .select('user_id, email, full_name, created_at')\
+            .execute()
+        
+        for customer in (customers_response.data or []):
+            user_id = customer.get('user_id')
+            if user_id:
+                user_ids_set.add(user_id)
+                if user_id not in users_dict:
+                    # New user from customers (likely Google authenticated)
+                    users_dict[user_id] = {
+                        'id': user_id,
+                        'email': customer.get('email'),
+                        'full_name': customer.get('full_name'),
+                        'phone_number': None,
+                        'created_at': customer.get('created_at'),
+                        'auth_provider': 'google',
+                        'source': 'customers'
+                    }
+                else:
+                    # Update existing user with customer data
+                    if not users_dict[user_id].get('email'):
+                        users_dict[user_id]['email'] = customer.get('email')
+                    if not users_dict[user_id].get('full_name'):
+                        users_dict[user_id]['full_name'] = customer.get('full_name')
+                    if not users_dict[user_id].get('created_at'):
+                        users_dict[user_id]['created_at'] = customer.get('created_at')
+        
+        # 3. Get users from orders table (users who placed orders)
+        orders_response = supabase.table('orders')\
+            .select('user_id, created_at')\
+            .execute()
+        
+        for order in (orders_response.data or []):
+            user_id = order.get('user_id')
+            if user_id:
+                user_ids_set.add(user_id)
+                if user_id not in users_dict:
+                    # User found only in orders (might be Google authenticated)
+                    users_dict[user_id] = {
+                        'id': user_id,
+                        'email': None,
+                        'full_name': None,
+                        'phone_number': None,
+                        'created_at': order.get('created_at'),
+                        'auth_provider': 'google',
+                        'source': 'orders'
+                    }
+        
+        # Convert dict to list
+        users = list(users_dict.values())
+        
+        # Apply search filter
+        if search:
+            search_lower = search.lower()
+            users = [u for u in users if 
+                    (u.get('email', '') and search_lower in u.get('email', '').lower()) or
+                    (u.get('full_name', '') and search_lower in u.get('full_name', '').lower())]
+        
+        # Sort by created_at (most recent first)
+        users.sort(key=lambda x: x.get('created_at') or '', reverse=True)
+        
+        # Apply pagination
+        total_count = len(users)
+        paginated_users = users[offset:offset + limit]
+        
+        # Enrich with additional data
+        enriched_users = []
+        for user in paginated_users:
+            user_id = user.get('id')
+            
+            # Get order count and total spent
+            orders_response = supabase.table('orders')\
+                .select('id, total')\
+                .eq('user_id', user_id)\
+                .execute()
+            
+            orders_count = len(orders_response.data) if orders_response.data else 0
+            total_spent = sum(float(o.get('total', 0)) for o in (orders_response.data or []))
+            
+            # Try to get email from customers if not set
+            if not user.get('email'):
+                customer_response = supabase.table('customers')\
+                    .select('email')\
+                    .eq('user_id', user_id)\
+                    .limit(1)\
+                    .execute()
+                if customer_response.data:
+                    user['email'] = customer_response.data[0].get('email')
+            
+            enriched_users.append({
+                'id': user_id,
+                'email': user.get('email') or 'N/A',
+                'full_name': user.get('full_name') or 'Unknown',
+                'phone_number': user.get('phone_number'),
+                'created_at': user.get('created_at'),
+                'auth_provider': user.get('auth_provider', 'email'),
+                'orders_count': orders_count,
+                'total_spent': round(total_spent, 2),
+                'has_profile': user.get('source') == 'user_profiles'
+            })
+        
+        return jsonify({
+            "success": True,
+            "data": enriched_users,
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total_count,
+                "total_pages": (total_count + limit - 1) // limit if total_count > 0 else 0
+            }
+        }), 200
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Admin users error: {error_trace}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
@@ -683,37 +833,83 @@ def admin_dashboard_best_selling():
     """Get best selling products"""
     try:
         limit = request.args.get('limit', 5, type=int)
-        products_response = supabase.table('products').select('id, name, stock').execute()
+        # Get only active products
+        products_response = supabase.table('products')\
+            .select('id, name, stock')\
+            .eq('status', 'active')\
+            .execute()
         products = {p['id']: p for p in (products_response.data or [])}
         
+        # Get sales count from order_items
         items_response = supabase.table('order_items').select('product_id, quantity').execute()
         sales_count = defaultdict(int)
         for item in (items_response.data or []):
-            sales_count[item['product_id']] += item.get('quantity', 1)
+            product_id = item.get('product_id')
+            if product_id and product_id in products:  # Only count active products
+                sales_count[product_id] += item.get('quantity', 1)
         
+        # Sort by sales count and get top products
         best_selling = []
         for product_id, sales in sorted(sales_count.items(), key=lambda x: x[1], reverse=True)[:limit]:
             product = products.get(product_id, {})
             best_selling.append({
-                "id": product_id,
+                "id": str(product_id),
                 "name": product.get('name', 'Unknown'),
                 "sales": sales,
                 "stock": product.get('stock', 0)
             })
         
+        # If we don't have enough products with sales, fill with products that have stock
+        if len(best_selling) < limit:
+            remaining = limit - len(best_selling)
+            for product in products.values():
+                if str(product['id']) not in [p['id'] for p in best_selling]:
+                    best_selling.append({
+                        "id": str(product['id']),
+                        "name": product.get('name', 'Unknown'),
+                        "sales": 0,
+                        "stock": product.get('stock', 0)
+                    })
+                    remaining -= 1
+                    if remaining <= 0:
+                        break
+        
         return jsonify({"success": True, "data": best_selling}), 200
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Best selling error: {error_trace}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
 @bp.route('/dashboard/low-stock', methods=['GET'])
 def admin_dashboard_low_stock():
-    """Get low stock items"""
+    """Get low stock items (stock <= 10 and > 0, only active products)"""
     try:
         limit = request.args.get('limit', 10, type=int)
-        response = supabase.table('products').select('id, name, stock, category').lte('stock', 10).gt('stock', 0).order('stock').limit(limit).execute()
-        return jsonify({"success": True, "data": response.data or []}), 200
+        response = supabase.table('products')\
+            .select('id, name, stock, category')\
+            .eq('status', 'active')\
+            .lte('stock', 10)\
+            .gt('stock', 0)\
+            .order('stock')\
+            .limit(limit)\
+            .execute()
+        
+        low_stock_items = []
+        for item in (response.data or []):
+            low_stock_items.append({
+                "id": str(item.get('id', '')),
+                "name": item.get('name', 'Unknown'),
+                "stock": item.get('stock', 0),
+                "category": item.get('category', 'N/A')
+            })
+        
+        return jsonify({"success": True, "data": low_stock_items}), 200
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Low stock error: {error_trace}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 

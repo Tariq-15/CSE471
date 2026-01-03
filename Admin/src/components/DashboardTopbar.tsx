@@ -27,7 +27,7 @@ export function DashboardTopbar({ onToggleSidebar }: DashboardTopbarProps) {
           <Menu className="w-5 h-5" />
         </Button>
         
-        <h1 className="text-xl font-semibold text-black">Unleashed Dashboard</h1>
+        <h1 className="text-xl font-semibold text-black">VELORA Dashboard</h1>
       </div>
       
       <div className="flex items-center gap-4">
