@@ -2,7 +2,7 @@
 Main Flask application file.
 This file imports and registers all route blueprints.
 """
-from flask import Flask
+from flask import Flask, jsonify
 from flask_cors import CORS
 
 # Import route blueprints
@@ -22,6 +22,16 @@ from routes import (
 
 app = Flask(__name__)
 CORS(app)
+
+# Root route
+@app.route('/', methods=['GET'])
+def root():
+    """Root endpoint"""
+    return jsonify({
+        "message": "VELORA API Server",
+        "status": "running",
+        "version": "1.0.0"
+    })
 
 # Register all blueprints
 app.register_blueprint(products_bp)
