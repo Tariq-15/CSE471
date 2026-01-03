@@ -1,5 +1,6 @@
 // Ensure API_BASE_URL always ends with /api
-const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://cse-471-tariquzzamans-projects.vercel.app'
+// Backend will be at frontend-tariquzzamans-projects.vercel.app after swap
+const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://frontend-tariquzzamans-projects.vercel.app'
 const API_BASE_URL = baseUrl.endsWith('/api') ? baseUrl : `${baseUrl}/api`
 
 export interface ApiResponse<T> {
